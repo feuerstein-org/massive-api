@@ -1,0 +1,11 @@
+.venv
+.pytest_cache
+.env
+.idea
+.coverage
+.vscode
+.DS_Store
+coverage.xml
+
+__pycache__/
+*.py[cod]

@@ -1,0 +1,37 @@
+[tools]
+python = "3.13"
+uv = "latest"
+
+[tasks.install]
+description = "Install all dependencies including dev dependencies"
+run = [
+    "uv sync --all-extras --dev",
+    "uv run pre-commit install"
+]
+
+[tasks.pre-commit]
+description = "Run pre-commit hooks on all files"
+depends = ["lint-fix"]
+run = "uv run pre-commit run --all-files"
+
+[tasks.lint]
+description = "Show all issues detected by linter"
+run = [
+    "uv run ruff check .",
+    "uv run ruff format . --check",
+]
+
+[tasks.lint-fix]
+description = "Fix all auto-fixable linting issues"
+run = [
+    "uv run ruff check --fix .",
+    "uv run ruff format .",
+]
+
+[tasks.test]
+description = "Run tests with coverage & pre-commit"
+depends = ["pre-commit"]
+run = [
+    "uv run coverage run -m pytest",
+    "uv run coverage report --fail-under=80"
+]

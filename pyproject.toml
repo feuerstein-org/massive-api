@@ -1,0 +1,101 @@
+[project]
+name = "eodhd-py"
+version = "0.3.0"
+description = "Python Implementation for EODHD API"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+ "aiohttp>=3.12.15",
+ "pandas>=2.0.0",
+ "pydantic>=2.11.7",
+ "steindamm>=0.8.0",
+]
+
+[dependency-groups]
+dev = [
+    "aioresponses",
+    "pandas-stubs>=2.0.0",
+    "pre-commit",
+    "coverage",
+    "pytest",
+    "pytest-asyncio",
+    "ruff>=0.14.14",
+    "pyright[nodejs]",
+    "pytest-randomly",
+    "pytest-mock",
+]
+
+[build-system]
+requires = ["uv_build>=0.8.5,<0.9.0"]
+build-backend = "uv_build"
+
+[tool.coverage.run]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+exclude_lines = [
+    'if TYPE_CHECKING:',
+    'pragma: no cover',
+    "if __name__ == '__main__':",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py314"
+lint.select = ["ALL"]
+lint.ignore = [
+    "ANN401",   # Disallow typing.Any
+    "ANN204",   # Require return type annotation for magic methods
+    "COM812",   # Require trailing commas - conflicts with ruff formatter
+    "D105",     # Require docstrings in magic methods
+    "D200",     # Require one-line docstrings to fit on one line
+    "D203",     # Require 1 blank line before class docstring
+    "D212",     # Require multi-line docstring summary to start at the first line
+    "D400",     # Require first line of docstring to end with a period
+    "D401",     # Require first line of docstring to be in imperative mood
+    "D415",     # Require first line of docstring to end with punctuation
+    "FBT001",   # Disallow boolean positional arguments
+    "FBT002",   # Disallow boolean default values in function definitions
+    "FIX002",   # Require TODO comments to contain issue links
+    "PGH003",   # Disallow blanket type: ignore comments
+    "TC002",    # Require third-party imports only used for type annotations to be in TYPE_CHECKING blocks
+    "TC003",    # Require standard imports only used for type annotations to be in TYPE_CHECKING blocks
+    "TD002",    # Require author in TODO comments
+    "TD003",    # Require issue link in TODO comments
+    "TRY003",   # Disallow long exception messages outside exception class
+    "TRY400"    # Require logging.exception instead of logging.error in exception handlers
+    ]
+lint.unfixable = []
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = [
+    "DTZ001",   # Require tzinfo in datetime constructors
+    "INP001",   # Require packages to to have a __init__.py file
+    "PLR2004",  # Disallow magic values
+    "PLR0913",  # Disallow too many arguments
+    "S101",     # Disallow use of assert
+    "SLF001",   # Disallow accessing private members
+    "S311",     # Disallow usage of pseudo-random generators
+    ]
+"example.py" = [
+    "ERA001"    # Disallow commented-out code
+]
+
+[tool.ruff.lint.pylint]
+max-args = 7   # Max arguments for functions - default 5
+
+[tool.pyright]
+pythonVersion = "3.13"
+pythonPlatform = "Linux"
+typeCheckingMode = "strict"
+# Those are enabled with strict mode, but can be uncommented to enable them in other modes
+# reportUnknownMemberType = "error"
+# reportUnknownVariableType = "error"
+# reportUnknownArgumentType = "error"
+# reportUnknownParameterType = "error"
+
+executionEnvironments = [
+    { root = "tests", reportPrivateUsage = false }
+]

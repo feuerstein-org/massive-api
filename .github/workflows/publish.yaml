@@ -1,0 +1,24 @@
+name: publish
+
+on:
+  release:
+    types: [published, edited]
+
+env:
+  MISE_OVERRIDE_CONFIG_FILENAMES: "mise.ci.toml"
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: jdx/mise-action@v2
+        with:
+          cache: true
+      - run: |
+          uv build
+          uv publish

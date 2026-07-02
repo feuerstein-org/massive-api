@@ -1,0 +1,36 @@
+name: test
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+env:
+  MISE_OVERRIDE_CONFIG_FILENAMES: "mise.ci.toml"
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: jdx/mise-action@v2
+        with:
+          cache: true
+      - name: Install dependencies
+        run: mise run install-ci
+      - name: Lint
+        run: mise run lint-ci
+      - name: Pre-commit
+        run: mise run pre-commit-ci
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: jdx/mise-action@v2
+        with:
+          cache: true
+      - name: Install dependencies
+        run: mise run install-ci
+      - name: Run tests
+        run: mise run test-ci
