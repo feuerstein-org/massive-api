@@ -1,5 +1,6 @@
 """Package allows for querying the Massive API using an async interface."""
 
+from massive_api.api.dividends import Dividend, DividendsApi
 from massive_api.api.reference import (
     ReferenceApi,
     Ticker,
@@ -14,6 +15,9 @@ from massive_api.client import MassiveApi
 from massive_api.exceptions import MassiveApiError, MaxRetriesExceededError
 from massive_api.params import (
     AdjustmentType,
+    DistributionType,
+    DividendFrequency,
+    DividendSortField,
     Locale,
     Market,
     Order,
@@ -26,6 +30,11 @@ from massive_api.utils import build_query_params, gather_bounded
 __all__ = (
     "AdjustmentType",
     "BaseMassiveApi",
+    "DistributionType",
+    "Dividend",
+    "DividendFrequency",
+    "DividendSortField",
+    "DividendsApi",
     "Locale",
     "Market",
     "MassiveApi",

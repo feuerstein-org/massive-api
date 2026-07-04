@@ -33,6 +33,14 @@ async def main() -> None:
         splits = await api.splits_api.get_splits(ticker="AAPL")
         logger.info("Retrieved %s splits", len(splits))
 
+        dividends = await api.dividends_api.get_dividends(
+            ticker="AAPL",
+            ex_dividend_date_gte="2024-01-01",
+            sort="ex_dividend_date",
+            order="desc",
+        )
+        logger.info("Retrieved %s dividends", len(dividends))
+
     # Example 2: custom config + bounded-concurrency fan-out over many tickers.
     config = MassiveApiConfig(
         api_key="demo",

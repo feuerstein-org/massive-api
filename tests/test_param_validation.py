@@ -10,13 +10,14 @@ from datetime import date, datetime
 
 import pytest
 
-from massive_api.params import AdjustmentType, Market
+from massive_api.params import AdjustmentType, DividendFrequency, Market, SplitSortField
 from massive_api.utils import (
     build_query_params,
     coerce_choice,
     coerce_choices,
     coerce_date,
     coerce_max_results,
+    coerce_sort,
     resolve_page_size,
 )
 
@@ -31,6 +32,35 @@ def test_coerce_choice() -> None:
         coerce_choice("bogus", Market, "market")
     assert "Invalid market 'bogus'" in str(exc_info.value)
     assert "Allowed values: stocks, crypto" in str(exc_info.value)
+
+
+def test_coerce_choice_int_literal() -> None:
+    """Int-valued Literals validate the same way as string ones."""
+    assert coerce_choice(4, DividendFrequency, "frequency") == 4
+    assert coerce_choice(0, DividendFrequency, "frequency") == 0
+    assert coerce_choice(None, DividendFrequency, "frequency") is None
+
+    with pytest.raises(ValueError) as exc_info:  # noqa: PT011
+        coerce_choice(5, DividendFrequency, "frequency")
+    assert "Invalid frequency 5" in str(exc_info.value)
+    assert "Allowed values: 0, 1, 2, 3, 4, 12" in str(exc_info.value)
+
+
+def test_coerce_sort() -> None:
+    """Fold sort and order into `field.direction`; order defaults to asc, None sort wins."""
+    assert coerce_sort("ticker", "desc", SplitSortField) == "ticker.desc"
+    assert coerce_sort("ticker", None, SplitSortField) == "ticker.asc"
+    assert coerce_sort(None, None, SplitSortField) is None
+
+    # A valid order with no sort field is a caller error: direction has nothing to order by.
+    with pytest.raises(ValueError, match="order requires sort"):
+        coerce_sort(None, "desc", SplitSortField)
+
+    with pytest.raises(ValueError, match="Invalid sort"):
+        coerce_sort("bogus", None, SplitSortField)
+    # order is validated even without a sort field, to fail fast on bad input.
+    with pytest.raises(ValueError, match="Invalid order"):
+        coerce_sort(None, "bogus", SplitSortField)
 
 
 def test_coerce_choices() -> None:

@@ -2,6 +2,7 @@
 
 from typing import Self, cast
 
+from massive_api.api.dividends import DividendsApi
 from massive_api.api.reference import ReferenceApi
 from massive_api.api.splits import SplitsApi
 from massive_api.base import BaseMassiveApi, MassiveApiConfig
@@ -56,3 +57,8 @@ class MassiveApi:
     def splits_api(self) -> SplitsApi:
         """SplitsApi client."""
         return cast("SplitsApi", self._get_endpoint(SplitsApi))
+
+    @property
+    def dividends_api(self) -> DividendsApi:
+        """DividendsApi client."""
+        return cast("DividendsApi", self._get_endpoint(DividendsApi))

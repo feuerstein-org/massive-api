@@ -2,6 +2,7 @@
 
 import pytest
 
+from massive_api.api.dividends import DividendsApi
 from massive_api.api.reference import ReferenceApi
 from massive_api.api.splits import SplitsApi
 from massive_api.base import BaseMassiveApi, MassiveApiConfig
@@ -10,6 +11,7 @@ from massive_api.client import MassiveApi
 API_ENDPOINTS = [
     ("reference_api", ReferenceApi),
     ("splits_api", SplitsApi),
+    ("dividends_api", DividendsApi),
 ]
 
 

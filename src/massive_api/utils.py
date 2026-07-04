@@ -5,19 +5,21 @@ from collections.abc import Awaitable, Mapping, Sequence
 from datetime import date, datetime
 from typing import Any, get_args
 
+from massive_api.params import Order
 
-def coerce_choice(value: str | None, literal: Any, param_name: str) -> str | None:
+
+def coerce_choice[T](value: T | None, literal: Any, param_name: str) -> T | None:
     """
-    Validate `value` against the members of a Literal type.
+    Validate `value` against the members of a Literal type (str or int members).
 
     Returns the value unchanged, or None if it is None. Raises ValueError (listing the
     allowed values) when `value` is not one of the Literal's members.
     """
     if value is None:
         return None
-    allowed: tuple[str, ...] = get_args(literal)
+    allowed: tuple[Any, ...] = get_args(literal)
     if value not in allowed:
-        joined = ", ".join(allowed)
+        joined = ", ".join(str(member) for member in allowed)
         msg = f"Invalid {param_name} {value!r}. Allowed values: {joined}."
         raise ValueError(msg)
     return value
@@ -39,6 +41,26 @@ def coerce_choices(values: Sequence[str] | None, literal: Any, param_name: str) 
         msg = f"Invalid {param_name} {invalid!r}. Allowed values: {joined}."
         raise ValueError(msg)
     return ",".join(values)
+
+
+def coerce_sort(sort: str | None, order: str | None, sort_literal: Any) -> str | None:
+    """
+    Combine a `sort` field and `order` direction into the API's `sort=field.direction` form.
+
+    Both values are validated (`order` even without `sort`, to fail fast on bad
+    input). Returns None when neither is given (the API then applies its own
+    default); `order` defaults to "asc" when a field is set. Raises ValueError if
+    `order` is given without `sort`, since direction is meaningless with no field
+    to order by.
+    """
+    sort_field = coerce_choice(sort, sort_literal, "sort")
+    direction = coerce_choice(order, Order, "order")
+    if sort_field is None:
+        if order is not None:
+            msg = "order requires sort: pass a sort field to order by, or omit order."
+            raise ValueError(msg)
+        return None
+    return f"{sort_field}.{direction or 'asc'}"
 
 
 def coerce_date(value: str | date | datetime | None, param_name: str) -> str | None:

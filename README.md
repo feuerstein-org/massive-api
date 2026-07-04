@@ -43,6 +43,7 @@ asyncio.run(main())
 | `reference_api` | `get_ticker_overview(ticker, ...)` | `GET /v3/reference/tickers/{ticker}` |
 | `reference_api` | `get_ticker_events(ticker_id, ...)` | `GET /vX/reference/tickers/{id}/events` |
 | `splits_api` | `get_splits(...)` | `GET /stocks/v1/splits` |
+| `dividends_api` | `get_dividends(...)` | `GET /stocks/v1/dividends` |
 
 More endpoints are coming soon. Contributions are welcome - see [Contributing](#contributing).
 
