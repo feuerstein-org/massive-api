@@ -2,20 +2,19 @@
 
 import random
 import string
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from types import SimpleNamespace
 from typing import Any, TypeVar
-from unittest.mock import AsyncMock
 
-import aiohttp
 import pytest
 from pytest_mock import MockerFixture
 
-from eodhd_py.base import BaseEodhdApi, EodhdApiConfig
+from massive_api.base import BaseMassiveApi, MassiveApiConfig
 
 
 def generate_random_api_key() -> str:
-    """Generate a random API key matching [A-Za-z0-9.]{16,32}."""
-    chars = string.ascii_letters + string.digits + "."
+    """Generate a random non-empty API key."""
+    chars = string.ascii_letters + string.digits
     length = random.randint(16, 32)
     return "".join(random.choice(chars) for _ in range(length))
 
@@ -24,55 +23,56 @@ def generate_random_api_key() -> str:
 class MockApiConfig:
     """Shared configuration for all API mocking."""
 
-    api_key: str = "demo"
-    close_session_on_aexit: bool = True
-    # Test specific options
-    mock_response_data: dict[str, Any] | None = None
-    mock_status_code: int = 200
-    mock_raise_for_status: bool = False
+    api_key: str = "test"
+    # Records returned by a mocked `_get_all_pages` (list endpoints).
+    mock_pages: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
+    # `results` object returned by a mocked `_make_request` (single-record endpoints).
+    mock_results: dict[str, Any] = field(default_factory=dict[str, Any])
 
 
-# Factories
-T = TypeVar("T", bound=BaseEodhdApi)
+T = TypeVar("T", bound=BaseMassiveApi)
 
 
 class MockApiFactory:
     """
-    Factory for testing subclasses that inherit from BaseEodhdApi.
+    Factory for testing subclasses that inherit from BaseMassiveApi.
 
-    Creates real instances but mocks the _make_request method.
-    Use this when testing EodHistoricalApi, etc.
+    Creates real instances but mocks the base I/O methods (`_get_all_pages` and
+    `_make_request`) so endpoint business logic can be tested without HTTP.
     """
 
     def __init__(self, mocker: MockerFixture) -> None:
         """Initialize with pytest-mock's mocker fixture."""
         self.mocker = mocker
 
-    def create(self, api_class: type[T], config: MockApiConfig | None = None, **kwargs: Any) -> tuple[T, AsyncMock]:
+    def create(
+        self,
+        api_class: type[T],
+        config: MockApiConfig | None = None,
+        **kwargs: Any,
+    ) -> tuple[T, SimpleNamespace]:
         """
         Create a mock instance of any API subclass.
 
-        kwargs will be passed to config if config is None.
+        kwargs will be passed to MockApiConfig if config is None.
+
+        Returns the instance and a namespace with `._get_all_pages` and `._make_request` mocks.
         """
         if config is None:
             config = MockApiConfig(**kwargs)
 
-        # Create real config and instance
-        real_config = EodhdApiConfig(api_key=config.api_key)
+        real_config = MassiveApiConfig(api_key=config.api_key)
         instance = api_class(config=real_config)
 
-        # Mock only _make_request
-        mock_make_request = self.mocker.AsyncMock(return_value=config.mock_response_data or {})
+        mock_get_all_pages = self.mocker.AsyncMock(return_value=config.mock_pages)
+        mock_make_request = self.mocker.AsyncMock(return_value={"results": config.mock_results})
 
-        if config.mock_raise_for_status:
-            mock_make_request.side_effect = aiohttp.ClientError("Mock error")
-
+        instance._get_all_pages = mock_get_all_pages
         instance._make_request = mock_make_request
 
-        return instance, mock_make_request
+        return instance, SimpleNamespace(get_all_pages=mock_get_all_pages, request_json=mock_make_request)
 
 
-# Fixtures
 @pytest.fixture
 def mock_api_factory(mocker: MockerFixture) -> MockApiFactory:
     """For integration testing of subclasses."""
@@ -80,27 +80,9 @@ def mock_api_factory(mocker: MockerFixture) -> MockApiFactory:
 
 
 @pytest.fixture
-def test_config() -> EodhdApiConfig:
-    """
-    Fixture providing a pre-configured EodhdApiConfig with standard test values.
-
-    This eliminates the need to manually specify rate limits in every test.
-
-    Examples:
-        def test_something(test_config):
-            api = BaseEodhdApi(config=test_config)
-            # Rate limits are already configured
-
-    """
-    return EodhdApiConfig(
+def test_config() -> MassiveApiConfig:
+    """Provide a pre-configured MassiveApiConfig with standard test values."""
+    return MassiveApiConfig(
         api_key=generate_random_api_key(),
-        daily_calls_rate_limit=50000,
-        daily_remaining_limit=4000,
-        minute_requests_rate_limit=100,
-        minute_remaining_limit=50,
-        extra_limit=10,
-        # This is required because if CI runs shortly before midnight UTC,
-        # tests may time out due to rate limit resets.
-        daily_max_sleep=60,
-        minute_max_sleep=60,
+        rate_limit_max_sleep=60,
     )

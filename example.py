@@ -1,61 +1,60 @@
-"""Sample EODHD API usage."""
+"""Sample Massive API usage."""
 
 import asyncio
 import logging
 
-from eodhd_py import EodhdApi, EodhdApiConfig
+from massive_api import MassiveApi, MassiveApiConfig, gather_bounded
 
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
 async def main() -> None:
-    """Main function to demonstrate EODHD API usage."""
-    # Example 1
-    async with EodhdApi() as api:
-        data = await api.eod_historical_api.get_eod_data(order="d", symbol="MSFT", interval="d")
-        logger.info("Retrieved EOD data: %s", len(data))
+    """Demonstrate Massive API usage."""
+    # Example 1: default config (flat 100 requests/second rate limiting).
+    async with MassiveApi(api_key="demo") as api:
+        # Closed-set params are typed Literals: a type checker flags a wrong string here.
+        # max_results caps total records (here: at most 50, fetched in one efficient request).
+        tickers = await api.reference_api.get_all_tickers(
+            market="stocks",
+            active=True,
+            order="asc",
+            sort="ticker",
+            max_results=50,
+        )
+        logger.info("Retrieved %s tickers", len(tickers))
 
-    # Example 2
-    # Using custom configuration
-    config = EodhdApiConfig(
+        overview = await api.reference_api.get_ticker_overview("AAPL")
+        logger.info("AAPL market cap: %s", overview.market_cap)
+
+        events = await api.reference_api.get_ticker_events("META")
+        logger.info("META events: %s", len(events.events))
+
+        splits = await api.splits_api.get_splits(ticker="AAPL")
+        logger.info("Retrieved %s splits", len(splits))
+
+    # Example 2: custom config + bounded-concurrency fan-out over many tickers.
+    config = MassiveApiConfig(
         api_key="demo",
         max_retries=5,
-        daily_max_sleep=1800,  # Wait max 30 minutes for daily limit
-        minute_max_sleep=60,  # Wait max 60 seconds for minute limit
-        # Note: setting the below is not recommended since the client auto-handles rate limits
-        # daily_calls_rate_limit=50000,  # 50k requests per day
-        # daily_remaining_limit=10000,  # 10k remaining requests
-        # minute_requests_rate_limit=500,  # 500 requests per minute
-        # minute_remaining_limit=100,  # 100 remaining requests
-        # extra_limit=10,  # 10 extra non-refilling requests
+        # Drop invalid rows instead of raising (per-call override also available).
+        on_validation_error="skip",
+        # Optional: pass a redis.asyncio connection for distributed rate limiting.
+        # redis_connection=redis_conn,
     )
-    async with EodhdApi(config=config) as api:
-        eod_data = await api.eod_historical_api.get_eod_data(symbol="AAPL", interval="d")
-        logger.info("EOD data retrieved: %s", len(eod_data))
+    async with MassiveApi(config=config) as api:
+        symbols = ["AAPL", "MSFT", "NVDA", "TSLA", "AMZN"]
+        # Saturate the 100/s bucket without spawning unbounded coroutines.
+        overviews = await gather_bounded(
+            50,
+            *(api.reference_api.get_ticker_overview(symbol) for symbol in symbols),
+        )
+        for overview in overviews:
+            logger.info("%s: %s employees", overview.ticker, overview.total_employees)
 
-        intraday_data = await api.intraday_historical_api.get_intraday_data(symbol="TSLA", interval="5m")
-        logger.info("Intraday data retrieved: %s", len(intraday_data))
-
-        dividends_data = await api.dividends_api.get_dividends(symbol="AAPL.US")
-        logger.info("Dividends data retrieved: %s", len(dividends_data))
-
-        splits_data = await api.splits_api.get_splits(symbol="AAPL.US")
-        logger.info("Splits data retrieved: %s", len(splits_data))
-
-        earnings_by_symbols = await api.earnings_api.get_earnings(symbols=["AAPL.US", "MCD.US"])
-        logger.info("Earnings by symbols retrieved: %s", len(earnings_by_symbols))
-
-        # Below API requests require a real API key
-
-        # ipos_data = await api.ipos_api.get_ipos()
-        # logging.info("IPOs data retrieved: %s", len(ipos_data))
-
-        # exchanges_data = await api.exchanges_api.get_exchanges()
-        # logging.info("Exchanges data retrieved: %s", len(exchanges_data))
-
-        # exchange_symbols = await api.exchange_symbol_list_api.get_exchange_symbols(exchange_code="US")
-        # logging.info("Exchange symbols retrieved: %s", len(exchange_symbols))
+        # Raw path: untouched JSON dicts, no validation.
+        raw_splits = await api.splits_api.get_splits_raw(ticker="AAPL")
+        logger.info("Raw splits payload: %s rows", len(raw_splits))
 
     logger.info("Done")
 

@@ -2,7 +2,7 @@
 # The idea is that we don't clutter mise's autocomplete
 
 [tools]
-python = "3.13"
+python = "3.14"
 uv = "latest"
 
 [tasks.install-ci]

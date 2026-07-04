@@ -1,20 +1,26 @@
 [project]
-name = "eodhd-py"
-version = "0.3.0"
-description = "Python Implementation for EODHD API"
+name = "massive-api"
+version = "0.1.0"
+description = "Async Python client for the Massive financial-data API"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 dependencies = [
- "aiohttp>=3.12.15",
- "pandas>=2.0.0",
+ # aiohttp is capped below 3.14 until aioresponses supports the new ClientResponse
+ # signature (3.14 added a required `stream_writer` kwarg that aioresponses 0.7.x omits).
+ # https://github.com/pnuckowski/aioresponses/issues/289
+ "aiohttp>=3.12.15,<3.14",
  "pydantic>=2.11.7",
  "steindamm>=0.8.0",
+ "urllib3"
 ]
+
+[project.urls]
+Homepage = "https://github.com/feuerstein-org/massive-api"
+Repository = "https://github.com/feuerstein-org/massive-api"
 
 [dependency-groups]
 dev = [
     "aioresponses",
-    "pandas-stubs>=2.0.0",
     "pre-commit",
     "coverage",
     "pytest",
@@ -84,17 +90,12 @@ lint.unfixable = []
 ]
 
 [tool.ruff.lint.pylint]
-max-args = 7   # Max arguments for functions - default 5
+max-args = 11   # Max arguments for functions - default 5
 
 [tool.pyright]
-pythonVersion = "3.13"
+pythonVersion = "3.14"
 pythonPlatform = "Linux"
 typeCheckingMode = "strict"
-# Those are enabled with strict mode, but can be uncommented to enable them in other modes
-# reportUnknownMemberType = "error"
-# reportUnknownVariableType = "error"
-# reportUnknownArgumentType = "error"
-# reportUnknownParameterType = "error"
 
 executionEnvironments = [
     { root = "tests", reportPrivateUsage = false }
