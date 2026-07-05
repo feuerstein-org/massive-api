@@ -118,17 +118,17 @@ See [Little's law](https://en.wikipedia.org/wiki/Little%27s_law) to calculate th
 
 Each list endpoint offers three ways to handle response validation:
 
-1. **validated (default)** - validate every record and raise `pydantic.ValidationError` on the first bad row. Returns `list[Model]`. This is the boundary default.
-2. **skip** - validate per record, drop invalid rows (logging each), and return only the valid ones. Returns `list[Model]` (possibly shorter).
+1. **skip (default)** - validate per record, drop invalid rows (logging each), and return only the valid ones. Returns `list[Model]` (possibly shorter).
+2. **raise** - validate every record and raise `pydantic.ValidationError` on the first bad row. Returns `list[Model]`.
 3. **raw** - no validation; return the untouched JSON dicts exactly as sent. Exposed as separate `*_raw()` methods returning `list[dict]`.
 
 The default of (1) vs (2) is set on the config and can be overridden per call:
 
 ```python
-config = MassiveApiConfig(api_key="...", on_validation_error="skip")  # default for all calls
+config = MassiveApiConfig(api_key="...", on_validation_error="raise")  # default for all calls
 
 # Per-call override
-tickers = await api.reference_api.get_all_tickers(on_validation_error="raise")
+tickers = await api.reference_api.get_all_tickers(on_validation_error="skip")
 
 # Raw path (returns list[dict], never raises):
 raw = await api.reference_api.get_all_tickers_raw(market="stocks")
