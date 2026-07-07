@@ -94,6 +94,31 @@ await api.reference_api.get_all_tickers(max_results=10_000)  # ~10 requests, ≤
 await api.reference_api.get_all_tickers()                    # every row, page size = API max
 ```
 
+## Sorting & defaults
+
+The client bakes in explicit `sort`/`order` defaults rather than relying on the API's
+server-side defaults, so results are deterministic even if the API changes its own
+defaults. Every list call sends these unless you override `sort`/`order`:
+
+| Endpoint | Default sort | Default order | On the wire |
+| --- | --- | --- | --- |
+| `get_all_tickers` | `ticker` | `asc` | `sort=ticker` + `order=asc` |
+| `get_dividends` | `ticker` | `asc` | `sort=ticker.asc` |
+| `get_splits` | `execution_date` | `desc` | `sort=execution_date.desc` |
+
+For dividends and splits there is no separate `order` parameter: the client folds
+`sort` + `order` into the API's `sort=field.direction` form. `get_all_tickers` sends
+`sort` and `order` as separate params, and also always sends `active=true` explicitly
+(pass `active=False` for delisted tickers).
+
+```python
+# Uses the baked-in default (sort=execution_date.desc)
+await api.splits_api.get_splits(ticker="AAPL")
+
+# Override either or both
+await api.splits_api.get_splits(ticker="AAPL", sort="ticker", order="asc")
+```
+
 ## Concurrency
 
 Use `gather_bounded` to fan out many requests (e.g. Ticker Overview across ~10k tickers)
@@ -133,6 +158,8 @@ tickers = await api.reference_api.get_all_tickers(on_validation_error="skip")
 # Raw path (returns list[dict], never raises):
 raw = await api.reference_api.get_all_tickers_raw(market="stocks")
 ```
+
+Note that this does not apply for non-list endpoints like `reference_api.get_ticker_overview`, if validation fails there, a `pydantic.ValidationError` will be returned.
 
 ## Development
 

@@ -43,24 +43,14 @@ def coerce_choices(values: Sequence[str] | None, literal: Any, param_name: str) 
     return ",".join(values)
 
 
-def coerce_sort(sort: str | None, order: str | None, sort_literal: Any) -> str | None:
-    """
-    Combine a `sort` field and `order` direction into the API's `sort=field.direction` form.
-
-    Both values are validated (`order` even without `sort`, to fail fast on bad
-    input). Returns None when neither is given (the API then applies its own
-    default); `order` defaults to "asc" when a field is set. Raises ValueError if
-    `order` is given without `sort`, since direction is meaningless with no field
-    to order by.
-    """
+def coerce_sort(sort: str, order: str, sort_literal: Any) -> str | None:
+    """Combine a `sort` field and `order` direction into the API's `sort=field.direction` form."""
     sort_field = coerce_choice(sort, sort_literal, "sort")
     direction = coerce_choice(order, Order, "order")
-    if sort_field is None:
-        if order is not None:
-            msg = "order requires sort: pass a sort field to order by, or omit order."
-            raise ValueError(msg)
-        return None
-    return f"{sort_field}.{direction or 'asc'}"
+    if not sort_field or not order:
+        msg = "order or sort were not provided."
+        raise ValueError(msg)
+    return f"{sort_field}.{direction}"
 
 
 def coerce_date(value: str | date | datetime | None, param_name: str) -> str | None:

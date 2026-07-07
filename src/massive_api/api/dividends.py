@@ -74,9 +74,9 @@ class DividendsApi(BaseMassiveApi):
         frequency_lt: int | None = None,
         frequency_lte: int | None = None,
         distribution_types: list[DistributionType] | None = None,
-        order: Order | None = None,
         max_results: int | None = None,
-        sort: DividendSortField | None = None,
+        sort: DividendSortField = "ticker",
+        order: Order = "asc",
     ) -> list[dict[str, Any]]:
         """
         Fetch dividends across pages as raw JSON dicts (no validation).
@@ -136,9 +136,9 @@ class DividendsApi(BaseMassiveApi):
         frequency_lt: int | None = None,
         frequency_lte: int | None = None,
         distribution_types: list[DistributionType] | None = None,
-        order: Order | None = None,
         max_results: int | None = None,
-        sort: DividendSortField | None = None,
+        sort: DividendSortField = "ticker",
+        order: Order = "asc",
         on_validation_error: Literal["raise", "skip"] | None = None,
     ) -> list[Dividend]:
         """
@@ -167,12 +167,10 @@ class DividendsApi(BaseMassiveApi):
             distribution_types: Filter by any of the given distribution types. A list of
                 `DistributionType` values ("recurring", "special", "supplemental",
                 "irregular", "unknown"); pass a single-element list to match one type.
-            order: Sort direction for `sort`, "asc" or "desc" (an `Order` value). Requires
-                `sort` to be set, and defaults to "asc" when it is. The endpoint has no
-                standalone order param; this is folded into `sort` as a "field.direction"
-                suffix. Passing `order` without `sort` raises ValueError.
             max_results: Maximum total records to return (None = no cap).
             sort: Field to sort by. One of the `DividendSortField` values (e.g. "ex_dividend_date").
+            order: Sort direction for `sort`, "asc" or "desc" (an `Order` value). Requires
+                `sort` to be set, defaults to "asc".
             on_validation_error: Override the config default ("raise" or "skip") for this call.
 
         Returns:

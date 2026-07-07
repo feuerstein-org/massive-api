@@ -4,10 +4,13 @@ from datetime import UTC, date, datetime
 from typing import Any
 
 import pytest
-from conftest import MockApiFactory
+from conftest import MockApiFactory, with_defaults
 from pydantic import ValidationError
 
 from massive_api.api.reference import ReferenceApi, Ticker, TickerEvents, TickerOverview
+
+# The SDK always sends these unless the call overrides them.
+DEFAULT_PARAMS = {"active": "true", "order": "asc", "sort": "ticker", "limit": "1000"}
 
 SAMPLE_TICKER = {
     "ticker": "AAPL",
@@ -64,16 +67,15 @@ SAMPLE_EVENTS = {
 @pytest.mark.parametrize(
     ("kwargs", "expected_params"),
     [
-        # Every call sends the page-size `limit`, defaulting to the API maximum (1000).
-        ({}, {"limit": "1000"}),
-        ({"market": "stocks", "active": True}, {"market": "stocks", "active": "true", "limit": "1000"}),
+        ({}, {}),  # Test default params
+        ({"market": "stocks", "active": True}, {"market": "stocks"}),
         (
             {"ticker": "AAPL", "ticker_type": "CS", "date": "2024-01-01", "max_results": 500},
             {"ticker": "AAPL", "type": "CS", "date": "2024-01-01", "limit": "500"},
         ),
         (
-            {"active": False, "order": "asc", "sort": "ticker"},
-            {"active": "false", "order": "asc", "sort": "ticker", "limit": "1000"},
+            {"active": False, "order": "desc", "sort": "name"},
+            {"active": "false", "order": "desc", "sort": "name"},
         ),
         # max_results shrinks the page size so the single page is not over-fetched.
         ({"max_results": 10}, {"limit": "10"}),
@@ -82,9 +84,9 @@ SAMPLE_EVENTS = {
         # Range operators and identifier filters map to their dotted query params.
         (
             {"ticker_gte": "A", "ticker_lte": "B", "cusip": "037833100", "cik": "0000320193"},
-            {"ticker.gte": "A", "ticker.lte": "B", "cusip": "037833100", "cik": "0000320193", "limit": "1000"},
+            {"ticker.gte": "A", "ticker.lte": "B", "cusip": "037833100", "cik": "0000320193"},
         ),
-        ({"ticker_gt": "A", "ticker_lt": "Z"}, {"ticker.gt": "A", "ticker.lt": "Z", "limit": "1000"}),
+        ({"ticker_gt": "A", "ticker_lt": "Z"}, {"ticker.gt": "A", "ticker.lt": "Z"}),
     ],
 )
 async def test_all_tickers_parameters(
@@ -99,7 +101,7 @@ async def test_all_tickers_parameters(
 
     mocks.get_all_pages.assert_called_once_with(
         "v3/reference/tickers",
-        expected_params,
+        with_defaults(expected_params, DEFAULT_PARAMS),
         max_results=kwargs.get("max_results"),
     )
     assert len(result) == 1
@@ -115,7 +117,7 @@ async def test_all_tickers_raw_returns_untouched_records(mock_api_factory: MockA
 
     mocks.get_all_pages.assert_called_once_with(
         "v3/reference/tickers",
-        {"market": "stocks", "limit": "1000"},
+        with_defaults({"market": "stocks"}, DEFAULT_PARAMS),
         max_results=None,
     )
     assert result == [SAMPLE_TICKER]

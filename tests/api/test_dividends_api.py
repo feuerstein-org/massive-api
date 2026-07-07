@@ -4,10 +4,13 @@ from datetime import date
 from typing import Any
 
 import pytest
-from conftest import MockApiFactory
+from conftest import MockApiFactory, with_defaults
 from pydantic import ValidationError
 
 from massive_api.api.dividends import Dividend, DividendsApi
+
+# The SDK always sends these unless the call overrides them.
+DEFAULT_PARAMS = {"sort": "ticker.asc", "limit": "5000"}
 
 SAMPLE_DIVIDEND = {
     "cash_amount": 0.26,
@@ -29,41 +32,46 @@ SAMPLE_DIVIDEND = {
 @pytest.mark.parametrize(
     ("kwargs", "expected_params"),
     [
-        # Every call sends the page-size `limit`, defaulting to the API maximum (5000).
-        ({}, {"limit": "5000"}),
-        ({"ticker": "AAPL"}, {"ticker": "AAPL", "limit": "5000"}),
+        ({}, {}),  # Test default params
+        ({"ticker": "AAPL"}, {"ticker": "AAPL"}),
         # tickers joins into a comma-separated `ticker.any_of`.
-        ({"tickers": ["AAPL", "MSFT"]}, {"ticker.any_of": "AAPL,MSFT", "limit": "5000"}),
+        ({"tickers": ["AAPL", "MSFT"]}, {"ticker.any_of": "AAPL,MSFT"}),
         (
             {"ticker_gte": "A", "ticker_lt": "B"},
-            {"ticker.gte": "A", "ticker.lt": "B", "limit": "5000"},
+            {"ticker.gte": "A", "ticker.lt": "B"},
         ),
         (
             {"ex_dividend_date_gte": "2025-01-01", "ex_dividend_date_lte": "2025-12-31"},
-            {"ex_dividend_date.gte": "2025-01-01", "ex_dividend_date.lte": "2025-12-31", "limit": "5000"},
+            {
+                "ex_dividend_date.gte": "2025-01-01",
+                "ex_dividend_date.lte": "2025-12-31",
+            },
         ),
         (
             {"ex_dividend_date_gt": "2025-01-01", "ex_dividend_date_lt": "2025-12-31"},
-            {"ex_dividend_date.gt": "2025-01-01", "ex_dividend_date.lt": "2025-12-31", "limit": "5000"},
+            {
+                "ex_dividend_date.gt": "2025-01-01",
+                "ex_dividend_date.lt": "2025-12-31",
+            },
         ),
         # Exact frequency is validated against the documented cadences; ranges pass through.
-        ({"frequency": 4}, {"frequency": "4", "limit": "5000"}),
+        ({"frequency": 4}, {"frequency": "4"}),
         (
             {"frequency_gte": 1, "frequency_lte": 12},
-            {"frequency.gte": "1", "frequency.lte": "12", "limit": "5000"},
+            {"frequency.gte": "1", "frequency.lte": "12"},
         ),
         # distribution_types joins into a comma-separated `distribution_type.any_of`.
         (
             {"distribution_types": ["special", "supplemental"]},
-            {"distribution_type.any_of": "special,supplemental", "limit": "5000"},
+            {"distribution_type.any_of": "special,supplemental"},
         ),
         # `sort` + `order` fold into a single `sort=field.direction` (no `order` on the wire).
         (
             {"sort": "ex_dividend_date", "order": "desc"},
-            {"sort": "ex_dividend_date.desc", "limit": "5000"},
+            {"sort": "ex_dividend_date.desc"},
         ),
         # `order` defaults to "asc" when only `sort` is given.
-        ({"sort": "ticker"}, {"sort": "ticker.asc", "limit": "5000"}),
+        ({"sort": "ticker"}, {"sort": "ticker.asc"}),
         ({"max_results": 25}, {"limit": "25"}),
     ],
 )
@@ -79,7 +87,7 @@ async def test_dividends_parameters(
 
     mocks.get_all_pages.assert_called_once_with(
         "stocks/v1/dividends",
-        expected_params,
+        with_defaults(expected_params, DEFAULT_PARAMS),
         max_results=kwargs.get("max_results"),
     )
     assert len(result) == 1
@@ -95,7 +103,7 @@ async def test_dividends_raw_returns_untouched_records(mock_api_factory: MockApi
 
     mocks.get_all_pages.assert_called_once_with(
         "stocks/v1/dividends",
-        {"ticker": "AAPL", "limit": "5000"},
+        with_defaults({"ticker": "AAPL"}, DEFAULT_PARAMS),
         max_results=None,
     )
     assert result == [SAMPLE_DIVIDEND]

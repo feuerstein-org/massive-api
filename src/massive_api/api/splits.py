@@ -56,9 +56,9 @@ class SplitsApi(BaseMassiveApi):
         execution_date_lt: str | date | datetime | None = None,
         execution_date_lte: str | date | datetime | None = None,
         adjustment_types: list[AdjustmentType] | None = None,
-        order: Order | None = None,
         max_results: int | None = None,
-        sort: SplitSortField | None = None,
+        sort: SplitSortField = "execution_date",
+        order: Order = "desc",
     ) -> list[dict[str, Any]]:
         """
         Fetch splits across pages as raw JSON dicts (no validation).
@@ -98,9 +98,9 @@ class SplitsApi(BaseMassiveApi):
         execution_date_lt: str | date | datetime | None = None,
         execution_date_lte: str | date | datetime | None = None,
         adjustment_types: list[AdjustmentType] | None = None,
-        order: Order | None = None,
         max_results: int | None = None,
-        sort: SplitSortField | None = None,
+        sort: SplitSortField = "execution_date",
+        order: Order = "desc",
         on_validation_error: Literal["raise", "skip"] | None = None,
     ) -> list[Split]:
         """
@@ -118,12 +118,10 @@ class SplitsApi(BaseMassiveApi):
             adjustment_types: Filter by any of the given adjustment types. A list of
                 `AdjustmentType` values ("forward_split", "reverse_split", "stock_dividend");
                 pass a single-element list to match one type, e.g. ["forward_split"].
-            order: Sort direction for `sort`, "asc" or "desc" (an `Order` value). Requires
-                `sort` to be set, and defaults to "asc" when it is. The endpoint has no
-                standalone order param; this is folded into `sort` as a "field.direction"
-                suffix. Passing `order` without `sort` raises ValueError.
             max_results: Maximum total records to return (None = no cap).
-            sort: Field to sort by. One of the `SplitSortField` values (e.g. "execution_date").
+            sort: Field to sort by. One of the `SplitSortField` values (defaults to "execution_date").
+            order: Sort direction for `sort`, "asc" or "desc" (an `Order` value). Requires
+                `sort` to be set, defaults to "desc".
             on_validation_error: Override the config default ("raise" or "skip") for this call.
 
         Returns:

@@ -86,3 +86,8 @@ def test_config() -> MassiveApiConfig:
         api_key=generate_random_api_key(),
         rate_limit_max_sleep=60,
     )
+
+
+def with_defaults(params: dict[str, str], defaults: dict[str, str]) -> dict[str, str]:
+    """Expected wire params: the SDK's always-sent defaults, overridden by anything the test specifies."""
+    return {**defaults, **params}

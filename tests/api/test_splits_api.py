@@ -4,10 +4,14 @@ from datetime import date
 from typing import Any
 
 import pytest
-from conftest import MockApiFactory
+from conftest import MockApiFactory, with_defaults
 from pydantic import ValidationError
 
 from massive_api.api.splits import Split, SplitsApi
+
+# The SDK always sends these unless the call overrides them (sort folds from
+# sort="execution_date" + order="desc").
+DEFAULT_PARAMS = {"sort": "execution_date.desc", "limit": "5000"}
 
 SAMPLE_SPLIT = {
     "ticker": "AAPL",
@@ -24,28 +28,27 @@ SAMPLE_SPLIT = {
 @pytest.mark.parametrize(
     ("kwargs", "expected_params"),
     [
-        # Every call sends the page-size `limit`, defaulting to the API maximum (5000).
-        ({}, {"limit": "5000"}),
-        ({"ticker": "AAPL"}, {"ticker": "AAPL", "limit": "5000"}),
+        ({}, {}),  # Test default params
+        ({"ticker": "AAPL"}, {"ticker": "AAPL"}),
         (
             {"execution_date_gte": "2020-01-01", "execution_date_lte": "2020-12-31"},
-            {"execution_date.gte": "2020-01-01", "execution_date.lte": "2020-12-31", "limit": "5000"},
+            {"execution_date.gte": "2020-01-01", "execution_date.lte": "2020-12-31"},
         ),
         (
             {"execution_date_gt": "2020-01-01", "execution_date_lt": "2020-12-31"},
-            {"execution_date.gt": "2020-01-01", "execution_date.lt": "2020-12-31", "limit": "5000"},
+            {"execution_date.gt": "2020-01-01", "execution_date.lt": "2020-12-31"},
         ),
         # `sort` + `order` fold into a single `sort=field.direction` (no `order` on the wire).
         (
             {"adjustment_types": ["reverse_split"], "order": "desc", "sort": "execution_date"},
-            {"adjustment_type.any_of": "reverse_split", "sort": "execution_date.desc", "limit": "5000"},
+            {"adjustment_type.any_of": "reverse_split", "sort": "execution_date.desc"},
         ),
-        # `order` defaults to "asc" when only `sort` is given.
-        ({"sort": "ticker"}, {"sort": "ticker.asc", "limit": "5000"}),
+        # `order` defaults to "desc" when only `sort` is given.
+        ({"sort": "ticker"}, {"sort": "ticker.desc"}),
         # adjustment_types joins into a comma-separated `adjustment_type.any_of`.
         (
             {"adjustment_types": ["forward_split", "reverse_split"]},
-            {"adjustment_type.any_of": "forward_split,reverse_split", "limit": "5000"},
+            {"adjustment_type.any_of": "forward_split,reverse_split"},
         ),
         ({"max_results": 25}, {"limit": "25"}),
     ],
@@ -62,7 +65,7 @@ async def test_splits_parameters(
 
     mocks.get_all_pages.assert_called_once_with(
         "stocks/v1/splits",
-        expected_params,
+        with_defaults(expected_params, DEFAULT_PARAMS),
         max_results=kwargs.get("max_results"),
     )
     assert len(result) == 1
@@ -78,7 +81,7 @@ async def test_splits_raw_returns_untouched_records(mock_api_factory: MockApiFac
 
     mocks.get_all_pages.assert_called_once_with(
         "stocks/v1/splits",
-        {"ticker": "AAPL", "limit": "5000"},
+        with_defaults({"ticker": "AAPL"}, DEFAULT_PARAMS),
         max_results=None,
     )
     assert result == [SAMPLE_SPLIT]

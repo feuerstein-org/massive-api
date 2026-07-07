@@ -135,16 +135,16 @@ class ReferenceApi(BaseMassiveApi):
         ticker_lt: str | None = None,
         ticker_lte: str | None = None,
         ticker_type: str | None = None,
+        active: bool = True,
         market: Market | None = None,
         exchange: str | None = None,
         cusip: str | None = None,
         cik: str | None = None,
-        active: bool | None = None,
         date: str | dt.date | dt.datetime | None = None,
         search: str | None = None,
-        order: Order | None = None,
         max_results: int | None = None,
-        sort: TickerSortField | None = None,
+        sort: TickerSortField = "ticker",
+        order: Order = "asc",
     ) -> list[dict[str, Any]]:
         """
         Fetch tickers across pages as raw JSON dicts (no validation).
@@ -185,16 +185,16 @@ class ReferenceApi(BaseMassiveApi):
         ticker_lt: str | None = None,
         ticker_lte: str | None = None,
         ticker_type: str | None = None,
+        active: bool = True,
         market: Market | None = None,
         exchange: str | None = None,
         cusip: str | None = None,
         cik: str | None = None,
-        active: bool | None = None,
         date: str | dt.date | dt.datetime | None = None,
         search: str | None = None,
-        order: Order | None = None,
         max_results: int | None = None,
-        sort: TickerSortField | None = None,
+        sort: TickerSortField = "ticker",
+        order: Order = "asc",
         on_validation_error: Literal["raise", "skip"] | None = None,
     ) -> list[Ticker]:
         """
@@ -208,17 +208,17 @@ class ReferenceApi(BaseMassiveApi):
             ticker_gte: Return tickers greater than or equal to this symbol.
             ticker_lt: Return tickers less than this symbol.
             ticker_lte: Return tickers less than or equal to this symbol.
-            ticker_type: Filter by ticker type (e.g. "CS", "ETF").
-            market: Filter by market. One of the `Market` values (e.g. "stocks").
-            exchange: Filter by primary exchange (ISO 10383 MIC code).
-            cusip: Filter by CUSIP (note: not returned in the response for legal reasons).
-            cik: Filter by SEC Central Index Key (CIK).
-            active: Whether to return active (True) or delisted (False) tickers.
-            date: Point-in-time date for the ticker universe (ISO string or date/datetime).
+            ticker_type: Filter by ticker type (e.g. "CS", "ETF") - by default all types.
+            market: Filter by market. One of the `Market` values (e.g. "stocks") - by default all markets.
+            exchange: Filter by primary exchange (ISO 10383 MIC code) - by default all exchanges.
+            cusip: Filter by CUSIP (note: not returned in the response for legal reasons) - by default query all CUSIPs.
+            cik: Filter by SEC Central Index Key (CIK) - by default query all CIKs.
+            active: Whether to return active (True and default) or delisted (False) tickers.
+            date: Point-in-time date for the ticker universe (ISO string or date/datetime) - by default latest date.
             search: Case-insensitive search over ticker and name.
-            order: Sort direction, "asc" or "desc" (an `Order` value).
             max_results: Maximum total records to return.
-            sort: Field to sort by. One of the `TickerSortField` values (e.g. "ticker").
+            sort: Field to sort by. One of the `TickerSortField` values. Defaults to "ticker".
+            order: Sort direction, "asc" or "desc" (an `Order` value). Defaults to "asc".
             on_validation_error: Override the config default ("raise" or "skip") for this call.
 
         Returns:

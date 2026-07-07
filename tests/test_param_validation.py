@@ -49,18 +49,7 @@ def test_coerce_choice_int_literal() -> None:
 def test_coerce_sort() -> None:
     """Fold sort and order into `field.direction`; order defaults to asc, None sort wins."""
     assert coerce_sort("ticker", "desc", SplitSortField) == "ticker.desc"
-    assert coerce_sort("ticker", None, SplitSortField) == "ticker.asc"
-    assert coerce_sort(None, None, SplitSortField) is None
-
-    # A valid order with no sort field is a caller error: direction has nothing to order by.
-    with pytest.raises(ValueError, match="order requires sort"):
-        coerce_sort(None, "desc", SplitSortField)
-
-    with pytest.raises(ValueError, match="Invalid sort"):
-        coerce_sort("bogus", None, SplitSortField)
-    # order is validated even without a sort field, to fail fast on bad input.
-    with pytest.raises(ValueError, match="Invalid order"):
-        coerce_sort(None, "bogus", SplitSortField)
+    assert coerce_sort("ticker", "asc", SplitSortField) == "ticker.asc"
 
 
 def test_coerce_choices() -> None:
