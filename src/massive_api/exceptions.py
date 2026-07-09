@@ -7,6 +7,7 @@ to handle any operational failure the client raises at request time.
 """
 
 HTTP_TOO_MANY_REQUESTS = 429
+HTTP_NOT_FOUND = 404
 
 
 class MassiveApiError(Exception):

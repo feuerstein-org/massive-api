@@ -11,7 +11,7 @@ import aiohttp
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 from steindamm import AsyncTokenBucket
 
-from massive_api.exceptions import HTTP_TOO_MANY_REQUESTS, MaxRetriesExceededError
+from massive_api.exceptions import HTTP_NOT_FOUND, HTTP_TOO_MANY_REQUESTS, MaxRetriesExceededError
 
 logger = logging.getLogger(__name__)
 
@@ -189,6 +189,26 @@ class BaseMassiveApi:
 
         msg = "Unexpected end of retry loop"
         raise RuntimeError(msg)
+
+    async def _make_request_optional(
+        self,
+        endpoint: str,
+        params: Mapping[str, str] | None = None,
+    ) -> dict[str, Any] | None:
+        """
+        Like `_make_request`, but return None when the resource does not exist (HTTP 404).
+
+        Every other error (401, 429-past-retries, 5xx, ...) propagates unchanged. Use this for
+        single-resource lookups where "not found" is a routine, expected outcome rather than a
+        failure. A 404 here means the resource is absent; a malformed 200 payload still surfaces
+        downstream (e.g. as a pydantic.ValidationError), so None unambiguously signals "not found".
+        """
+        try:
+            return await self._make_request(endpoint, params)
+        except aiohttp.ClientResponseError as e:
+            if e.status == HTTP_NOT_FOUND:
+                return None
+            raise
 
     def _retry_backoff(self, attempt: int) -> float:
         """

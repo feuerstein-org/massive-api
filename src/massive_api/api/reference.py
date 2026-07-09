@@ -254,14 +254,18 @@ class ReferenceApi(BaseMassiveApi):
         ticker: str,
         *,
         date: str | dt.date | dt.datetime | None = None,
-    ) -> dict[str, Any]:
+    ) -> dict[str, Any] | None:
         """
         Fetch the raw JSON `results` object for a single ticker (no validation).
+
+        Returns None if the ticker does not exist (HTTP 404).
 
         Docs: https://massive.com/docs/rest/stocks/tickers/ticker-overview
         """
         params = build_query_params({"date": coerce_date(date, "date")})
-        data = await self._make_request(f"{TICKERS_ENDPOINT}/{ticker}", params)
+        data = await self._make_request_optional(f"{TICKERS_ENDPOINT}/{ticker}", params)
+        if data is None:
+            return None
         return data.get("results") or {}
 
     async def get_ticker_overview(
@@ -269,7 +273,7 @@ class ReferenceApi(BaseMassiveApi):
         ticker: str,
         *,
         date: str | dt.date | dt.datetime | None = None,
-    ) -> TickerOverview:
+    ) -> TickerOverview | None:
         """
         Get detailed information for a single ticker, validated into a `TickerOverview`.
 
@@ -280,24 +284,32 @@ class ReferenceApi(BaseMassiveApi):
             date: Optional point-in-time date (ISO string or date/datetime); defaults to latest.
 
         Returns:
-            A validated `TickerOverview`. Raises pydantic.ValidationError on an invalid payload.
+            A validated `TickerOverview`, or None if the ticker does not exist (HTTP 404).
+            Raises pydantic.ValidationError on an invalid payload.
 
         """
-        return TickerOverview.model_validate(await self.get_ticker_overview_raw(ticker, date=date))
+        raw = await self.get_ticker_overview_raw(ticker, date=date)
+        if raw is None:
+            return None
+        return TickerOverview.model_validate(raw)
 
     async def get_ticker_events_raw(
         self,
         ticker_id: str,
         *,
         types: TickerEventType | None = None,
-    ) -> dict[str, Any]:
+    ) -> dict[str, Any] | None:
         """
         Fetch the raw JSON `results` object of ticker events (no validation).
+
+        Returns None if the ticker does not exist (HTTP 404).
 
         Docs: https://massive.com/docs/rest/stocks/corporate-actions/ticker-events
         """
         params = build_query_params({"types": coerce_choice(types, TickerEventType, "types")})
-        data = await self._make_request(f"{TICKER_EVENTS_ENDPOINT}/{ticker_id}/events", params)
+        data = await self._make_request_optional(f"{TICKER_EVENTS_ENDPOINT}/{ticker_id}/events", params)
+        if data is None:
+            return None
         return data.get("results") or {}
 
     async def get_ticker_events(
@@ -305,7 +317,7 @@ class ReferenceApi(BaseMassiveApi):
         ticker_id: str,
         *,
         types: TickerEventType | None = None,
-    ) -> TickerEvents:
+    ) -> TickerEvents | None:
         """
         Get the corporate-event history for a ticker, validated into `TickerEvents`.
 
@@ -316,7 +328,11 @@ class ReferenceApi(BaseMassiveApi):
             types: Event type to include. A `TickerEventType` value (e.g. "ticker_change").
 
         Returns:
-            A validated `TickerEvents`. Raises pydantic.ValidationError on an invalid payload.
+            A validated `TickerEvents`, or None if the ticker does not exist (HTTP 404).
+            Raises pydantic.ValidationError on an invalid payload.
 
         """
-        return TickerEvents.model_validate(await self.get_ticker_events_raw(ticker_id, types=types))
+        raw = await self.get_ticker_events_raw(ticker_id, types=types)
+        if raw is None:
+            return None
+        return TickerEvents.model_validate(raw)

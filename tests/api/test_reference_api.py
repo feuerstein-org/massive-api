@@ -2,12 +2,20 @@
 
 from datetime import UTC, date, datetime
 from typing import Any
+from unittest.mock import Mock
 
+import aiohttp
 import pytest
 from conftest import MockApiFactory, with_defaults
 from pydantic import ValidationError
 
 from massive_api.api.reference import ReferenceApi, Ticker, TickerEvents, TickerOverview
+
+
+def _response_error(status: int) -> aiohttp.ClientResponseError:
+    """Build an aiohttp.ClientResponseError with the given HTTP status."""
+    return aiohttp.ClientResponseError(request_info=Mock(), history=(), status=status)
+
 
 # The SDK always sends these unless the call overrides them.
 DEFAULT_PARAMS = {"active": "true", "order": "asc", "sort": "ticker", "limit": "1000"}
@@ -218,12 +226,33 @@ async def test_ticker_overview_raw_returns_untouched_records(mock_api_factory: M
 
 
 @pytest.mark.asyncio
+async def test_ticker_overview_returns_none_on_404(mock_api_factory: MockApiFactory) -> None:
+    """A 404 (unknown ticker) yields None rather than raising, for both the raw and typed methods."""
+    api, mocks = mock_api_factory.create(ReferenceApi, mock_results=SAMPLE_OVERVIEW)
+    mocks.request_json.side_effect = _response_error(404)
+
+    assert await api.get_ticker_overview_raw("NOPE") is None
+    assert await api.get_ticker_overview("NOPE") is None
+
+
+@pytest.mark.asyncio
+async def test_ticker_overview_propagates_non_404_errors(mock_api_factory: MockApiFactory) -> None:
+    """Non-404 HTTP errors (e.g. 401, 500) still propagate rather than becoming None."""
+    api, mocks = mock_api_factory.create(ReferenceApi, mock_results=SAMPLE_OVERVIEW)
+    mocks.request_json.side_effect = _response_error(500)
+
+    with pytest.raises(aiohttp.ClientResponseError):
+        await api.get_ticker_overview("AAPL")
+
+
+@pytest.mark.asyncio
 async def test_ticker_overview_parses_typed_fields(mock_api_factory: MockApiFactory) -> None:
     """A valid overview parses into precise types and flattens the nested address."""
     api, _ = mock_api_factory.create(ReferenceApi, mock_results=SAMPLE_OVERVIEW)
 
     result = await api.get_ticker_overview("AAPL")
 
+    assert result is not None
     assert result.market == "stocks"
     assert result.locale == "us"
     assert result.market_cap == 3.0e12
@@ -311,12 +340,33 @@ async def test_ticker_events_raw_returns_untouched_records(mock_api_factory: Moc
 
 
 @pytest.mark.asyncio
+async def test_ticker_events_returns_none_on_404(mock_api_factory: MockApiFactory) -> None:
+    """A 404 (unknown ticker) yields None rather than raising, for both the raw and typed methods."""
+    api, mocks = mock_api_factory.create(ReferenceApi, mock_results=SAMPLE_EVENTS)
+    mocks.request_json.side_effect = _response_error(404)
+
+    assert await api.get_ticker_events_raw("NOPE") is None
+    assert await api.get_ticker_events("NOPE") is None
+
+
+@pytest.mark.asyncio
+async def test_ticker_events_propagates_non_404_errors(mock_api_factory: MockApiFactory) -> None:
+    """Non-404 HTTP errors (e.g. 401, 500) still propagate rather than becoming None."""
+    api, mocks = mock_api_factory.create(ReferenceApi, mock_results=SAMPLE_EVENTS)
+    mocks.request_json.side_effect = _response_error(500)
+
+    with pytest.raises(aiohttp.ClientResponseError):
+        await api.get_ticker_events("META")
+
+
+@pytest.mark.asyncio
 async def test_ticker_events_parses_typed_fields(mock_api_factory: MockApiFactory) -> None:
     """A valid response parses nested events into precise types (date, nested ticker_change)."""
     api, _ = mock_api_factory.create(ReferenceApi, mock_results=SAMPLE_EVENTS)
 
     result = await api.get_ticker_events("META")
 
+    assert result is not None
     assert result.name == "Meta Platforms, Inc."
     assert len(result.events) == 1
     event = result.events[0]

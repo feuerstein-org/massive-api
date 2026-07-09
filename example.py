@@ -24,11 +24,14 @@ async def main() -> None:
         )
         logger.info("Retrieved %s tickers", len(tickers))
 
+        # Single-resource lookups return None for an unknown ticker (HTTP 404).
         overview = await api.reference_api.get_ticker_overview("AAPL")
-        logger.info("AAPL market cap: %s", overview.market_cap)
+        if overview is not None:
+            logger.info("AAPL market cap: %s", overview.market_cap)
 
         events = await api.reference_api.get_ticker_events("META")
-        logger.info("META events: %s", len(events.events))
+        if events is not None:
+            logger.info("META events: %s", len(events.events))
 
         splits = await api.splits_api.get_splits(ticker="AAPL")
         logger.info("Retrieved %s splits", len(splits))
@@ -58,7 +61,8 @@ async def main() -> None:
             *(api.reference_api.get_ticker_overview(symbol) for symbol in symbols),
         )
         for overview in overviews:
-            logger.info("%s: %s employees", overview.ticker, overview.total_employees)
+            if overview is not None:
+                logger.info("%s: %s employees", overview.ticker, overview.total_employees)
 
         # Raw path: untouched JSON dicts, no validation.
         raw_splits = await api.splits_api.get_splits_raw(ticker="AAPL")
