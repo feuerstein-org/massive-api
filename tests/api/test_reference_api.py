@@ -10,11 +10,13 @@ from conftest import MockApiFactory, with_defaults
 from pydantic import ValidationError
 
 from massive_api.api.reference import ReferenceApi, Ticker, TickerEvents, TickerOverview
+from massive_api.exceptions import MassiveApiHTTPError, http_error_from_response
 
 
-def _response_error(status: int) -> aiohttp.ClientResponseError:
-    """Build an aiohttp.ClientResponseError with the given HTTP status."""
-    return aiohttp.ClientResponseError(request_info=Mock(), history=(), status=status)
+def _response_error(status: int) -> MassiveApiHTTPError:
+    """Build the typed MassiveApiHTTPError that `_make_request` raises for the given HTTP status."""
+    raw = aiohttp.ClientResponseError(request_info=Mock(), history=(), status=status)
+    return http_error_from_response(raw)
 
 
 # The SDK always sends these unless the call overrides them.
@@ -241,7 +243,7 @@ async def test_ticker_overview_propagates_non_404_errors(mock_api_factory: MockA
     api, mocks = mock_api_factory.create(ReferenceApi, mock_results=SAMPLE_OVERVIEW)
     mocks.request_json.side_effect = _response_error(500)
 
-    with pytest.raises(aiohttp.ClientResponseError):
+    with pytest.raises(MassiveApiHTTPError):
         await api.get_ticker_overview("AAPL")
 
 
@@ -355,7 +357,7 @@ async def test_ticker_events_propagates_non_404_errors(mock_api_factory: MockApi
     api, mocks = mock_api_factory.create(ReferenceApi, mock_results=SAMPLE_EVENTS)
     mocks.request_json.side_effect = _response_error(500)
 
-    with pytest.raises(aiohttp.ClientResponseError):
+    with pytest.raises(MassiveApiHTTPError):
         await api.get_ticker_events("META")
 
 

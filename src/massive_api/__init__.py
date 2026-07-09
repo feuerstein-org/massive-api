@@ -12,7 +12,14 @@ from massive_api.api.reference import (
 from massive_api.api.splits import Split, SplitsApi
 from massive_api.base import BaseMassiveApi, MassiveApiConfig
 from massive_api.client import MassiveApi
-from massive_api.exceptions import MassiveApiError, MaxRetriesExceededError
+from massive_api.exceptions import (
+    AuthenticationError,
+    MassiveApiError,
+    MassiveApiHTTPError,
+    MaxRetriesExceededError,
+    NotFoundError,
+    ServerError,
+)
 from massive_api.params import (
     AdjustmentType,
     DistributionType,
@@ -29,6 +36,7 @@ from massive_api.utils import build_query_params, gather_bounded
 
 __all__ = (
     "AdjustmentType",
+    "AuthenticationError",
     "BaseMassiveApi",
     "DistributionType",
     "Dividend",
@@ -40,9 +48,12 @@ __all__ = (
     "MassiveApi",
     "MassiveApiConfig",
     "MassiveApiError",
+    "MassiveApiHTTPError",
     "MaxRetriesExceededError",
+    "NotFoundError",
     "Order",
     "ReferenceApi",
+    "ServerError",
     "Split",
     "SplitSortField",
     "SplitsApi",

@@ -1,8 +1,6 @@
 # massive-api
 
-An async Python client for the [Massive](https://massive.com/) financial-data REST API,
-with smooth built-in rate limiting, cursor pagination, and pydantic validation. This is an
-individual project and is not associated with or sponsored by Massive.
+An async Python client for the [Massive](https://massive.com/) financial-data REST API, with smooth built-in rate limiting, cursor pagination, and pydantic validation. This is an individual project and is not associated with or sponsored by Massive.
 
 ## Installation
 
@@ -71,15 +69,36 @@ For the Massive **basic free tier** (5 requests/minute), set:
 config = MassiveApiConfig(api_key="YOUR_API_KEY", requests_per_period=5, period_seconds=60)
 ```
 
-Requests that receive HTTP 429 are retried up to `max_retries` with exponential backoff
-(1s, 2s, 4s, …), floored at the token-refill interval (`period_seconds /
-requests_per_period`) so a slow tier waits at least long enough for the next token - e.g. on
-the 5/minute free tier each retry waits ≥12s rather than earning another 429.
+Requests that receive HTTP 429 are retried up to `max_retries` with exponential backoff (1s, 2s, 4s, …), floored at the token-refill interval (`period_seconds / requests_per_period`) so a slow tier waits at least long enough for the next token - e.g. on the 5/minute free tier each retry waits ≥12s rather than earning another 429.
+
+## Error handling
+
+Every failure the client raises at request time is a subclass of `MassiveApiError`, so you never have to catch the underlying transport (`aiohttp`) exceptions:
+
+```python
+from massive_api import (
+    MassiveApiError,        # base class for everything below
+    AuthenticationError,    # HTTP 401 / 403
+    NotFoundError,          # HTTP 404
+    ServerError,            # HTTP 5xx
+    MassiveApiHTTPError,    # any other HTTP error status
+    MaxRetriesExceededError,  # 429 persisted past max_retries
+)
+
+try:
+    overview = await api.reference_api.get_ticker_overview("AAPL")
+except AuthenticationError:
+    ...  # bad/missing key or insufficient plan entitlement
+except MassiveApiError as e:
+    ...  # anything else the client raises
+```
+
+HTTP errors carry `.status` (and `.message`), and the originating `aiohttp.ClientResponseError` is preserved on `__cause__`. Single-resource lookups (`get_ticker_overview`, `get_ticker_events`) map 404 to `None` instead of raising. Only unexpected 404s raise an exception.
 
 ## Pagination
 
-List endpoints (`get_all_tickers`, `get_splits`) follow Massive's `next_url` cursor
-automatically. A single client-side control governs how much is fetched:
+List endpoints (`get_all_tickers`, `get_splits`, `get_custom_bars`) follow Massive's
+`next_url` cursor automatically. A single client-side control governs how much is fetched:
 
 - **`max_results`** - a cap on the *total* records returned across all pages. Pagination
   stops as soon as the cap is reached, so `max_results=10` costs **one** request, not
@@ -96,9 +115,7 @@ await api.reference_api.get_all_tickers()                    # every row, page s
 
 ## Sorting & defaults
 
-The client bakes in explicit `sort`/`order` defaults rather than relying on the API's
-server-side defaults, so results are deterministic even if the API changes its own
-defaults. Every list call sends these unless you override `sort`/`order`:
+The client bakes in explicit `sort`/`order` defaults rather than relying on the API's server-side defaults, so results are deterministic even if the API changes its own defaults. Every list call sends these unless you override `sort`/`order`:
 
 | Endpoint | Default sort | Default order | On the wire |
 | --- | --- | --- | --- |
@@ -121,9 +138,7 @@ await api.splits_api.get_splits(ticker="AAPL", sort="ticker", order="asc")
 
 ## Concurrency
 
-Use `gather_bounded` to fan out many requests (e.g. Ticker Overview across ~10k tickers)
-while keeping the number of in-flight coroutines bounded so they saturate - but do not
-overrun - the 100/s bucket:
+Use `gather_bounded` to fan out many requests (e.g. Ticker Overview across ~10k tickers) while keeping the number of in-flight coroutines bounded so they saturate - but do not overrun - the 100/s bucket:
 
 ```python
 from massive_api import gather_bounded
@@ -173,6 +188,4 @@ See [`example.py`](example.py) for a runnable end-to-end example.
 
 ## Contributing
 
-Contributions are welcome! Additional endpoint coverage is on the roadmap, and pull
-requests that add endpoints, fix bugs, or improve the docs are appreciated. Please run the
-lint and test suite above before opening a pull request.
+Contributions are welcome! Additional endpoint coverage is on the roadmap, and pull requests that add endpoints, fix bugs, or improve the docs are appreciated. Please run the lint and test suite above before opening a pull request.

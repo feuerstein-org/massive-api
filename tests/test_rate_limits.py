@@ -10,7 +10,7 @@ from pytest_mock import MockerFixture
 from steindamm import MaxSleepExceededError
 
 from massive_api.base import BaseMassiveApi, MassiveApiConfig
-from massive_api.exceptions import MaxRetriesExceededError
+from massive_api.exceptions import AuthenticationError, MaxRetriesExceededError, NotFoundError, ServerError
 
 TICKERS_URL = "https://api.massive.com/v3/reference/tickers"
 
@@ -183,10 +183,48 @@ async def test_non_429_errors_not_retried(mocker: MockerFixture, test_config: Ma
         with aioresponses() as mock_http:
             mock_http.get(TICKERS_URL, status=404)  # type: ignore
 
-            with pytest.raises(aiohttp.ClientResponseError) as exc_info:
+            with pytest.raises(NotFoundError) as exc_info:
                 await api._make_request("v3/reference/tickers")
 
             assert exc_info.value.status == 404
+            assert isinstance(exc_info.value.__cause__, aiohttp.ClientResponseError)
             assert mock_sleep.call_count == 0
+    finally:
+        await session.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("status", "expected_exception"),
+    [
+        (401, AuthenticationError),
+        (403, AuthenticationError),
+        (404, NotFoundError),
+        (500, ServerError),
+        (503, ServerError),
+    ],
+)
+async def test_http_errors_wrapped_in_typed_exceptions(
+    mocker: MockerFixture,
+    test_config: MassiveApiConfig,
+    status: int,
+    expected_exception: type[Exception],
+) -> None:
+    """Non-429 HTTP errors surface as typed MassiveApiHTTPError subclasses, not raw aiohttp errors."""
+    session = aiohttp.ClientSession()
+
+    try:
+        test_config.session = session
+        api = BaseMassiveApi(config=test_config)
+        mocker.patch("asyncio.sleep")
+
+        with aioresponses() as mock_http:
+            mock_http.get(TICKERS_URL, status=status)  # type: ignore
+
+            with pytest.raises(expected_exception) as exc_info:
+                await api._make_request("v3/reference/tickers")
+
+            assert exc_info.value.status == status  # type: ignore[attr-defined]
+            assert isinstance(exc_info.value.__cause__, aiohttp.ClientResponseError)
     finally:
         await session.close()

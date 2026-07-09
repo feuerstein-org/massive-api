@@ -11,7 +11,12 @@ import aiohttp
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 from steindamm import AsyncTokenBucket
 
-from massive_api.exceptions import HTTP_NOT_FOUND, HTTP_TOO_MANY_REQUESTS, MaxRetriesExceededError
+from massive_api.exceptions import (
+    HTTP_TOO_MANY_REQUESTS,
+    MaxRetriesExceededError,
+    NotFoundError,
+    http_error_from_response,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -162,7 +167,8 @@ class BaseMassiveApi:
 
         Raises:
             MaxRetriesExceededError: If 429 responses persist past max_retries.
-            aiohttp.ClientResponseError: For any non-429 HTTP error response.
+            MassiveApiHTTPError: For any non-429 HTTP error response (AuthenticationError on
+                401/403, NotFoundError on 404, ServerError on 5xx, otherwise the base class).
             steindamm.MaxSleepExceededError: If the rate-limit wait exceeds max_sleep.
 
         """
@@ -181,7 +187,7 @@ class BaseMassiveApi:
                     return data
             except aiohttp.ClientResponseError as e:
                 if e.status != HTTP_TOO_MANY_REQUESTS:
-                    raise
+                    raise http_error_from_response(e) from e
                 # Retry on 429 errors
                 if attempt >= self.config.max_retries:
                     raise MaxRetriesExceededError(self.config.max_retries, e.status) from None
@@ -205,10 +211,8 @@ class BaseMassiveApi:
         """
         try:
             return await self._make_request(endpoint, params)
-        except aiohttp.ClientResponseError as e:
-            if e.status == HTTP_NOT_FOUND:
-                return None
-            raise
+        except NotFoundError:
+            return None
 
     def _retry_backoff(self, attempt: int) -> float:
         """
