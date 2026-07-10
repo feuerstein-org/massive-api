@@ -32,14 +32,13 @@ class MassiveApi:
 
     async def __aenter__(self) -> Self:
         """Enter the asynchronous context manager."""
-        self.config.increment_session_ref()
+        # Session-sharing protocol between the config and the client classes of this package.
+        self.config._acquire_session()  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
         return self
 
     async def __aexit__(self, *args) -> None:  # type: ignore # noqa: ANN002
-        """Exit the asynchronous context manager and close session if no other instances are using it."""
-        self.config.decrement_session_ref()
-        if self.config.should_close_session() and not self.config.session.closed:
-            await self.config.session.close()
+        """Exit the asynchronous context manager; the config closes the session after the last exit."""
+        await self.config._release_session()  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
 
     def _get_endpoint(self, endpoint_class: type[BaseMassiveApi]) -> BaseMassiveApi:
         """Generic endpoint getter"""

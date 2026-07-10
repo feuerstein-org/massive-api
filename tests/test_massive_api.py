@@ -36,8 +36,14 @@ async def test_base_massive_api_init(
     else:
         api = BaseMassiveApi(config=config, api_key=api_key)
         assert api.config is not None
-        assert api.session is not None
         assert api.BASE_URL == "https://api.massive.com"
+        # No session is opened until first access; accessing it creates one lazily.
+        assert api.config._session is None
+        try:
+            assert api.config.session is not None
+            assert not api.config.session.closed
+        finally:
+            await api.config.session.close()
 
 
 @pytest.mark.asyncio

@@ -45,9 +45,9 @@ asyncio.run(main())
 
 More endpoints are coming soon. Contributions are welcome - see [Contributing](#contributing).
 
-## Rate limiting
+## Config
 
-A single in-memory token bucket enforces **`requests_per_period` requests every `period_seconds`** (default 100 per 1s) with smooth refill. Bucket capacity equals `requests_per_period`, so it tolerates a burst of up to one full period's allowance before settling to the steady rate. The bucket is shared across all endpoint instances that use the same API key. Every request - including each page of a paginated result - draws one token.
+A single in-memory token bucket enforces **`requests_per_period` requests every `period_seconds`** (default 100 per 1s) with smooth refill. Bucket capacity equals `requests_per_period`, so it tolerates a burst of up to one full period's allowance before settling to the steady rate. Every request - including each page of a paginated result - draws one token.
 Configure it via `MassiveApiConfig`:
 
 ```python
@@ -75,6 +75,22 @@ Requests that receive HTTP 429 are retried up to `max_retries` with exponential 
 Transient server faults (HTTP 5xx) and transport failures (timeouts, connection errors) are retried the same way. If a 5xx persists past `max_retries`, the final `ServerError` is raised; persistent transport failures raise `TransportError`; persistent 429s raise `MaxRetriesExceededError`.
 
 Each request times out after `request_timeout` seconds (default 30). If you supply your own `aiohttp` session, its timeout settings are used instead.
+
+## Shared session & rate limiter
+
+Everything built from one `MassiveApiConfig` - all endpoint accessors of a `MassiveApi` client, extra clients, standalone endpoint instances - shares a single `aiohttp.ClientSession`, i.e. one connection pool reusing TCP/TLS connections across every request. The session is created lazily on the first request (constructing a client opens nothing) and is reference-counted across `async with` blocks: the config closes it automatically when the last instance using it exits.
+
+```python
+config = MassiveApiConfig(api_key="YOUR_API_KEY")
+
+async with MassiveApi(config) as api, MassiveApi(config) as api2:
+    ...  # one connection pool, one token bucket
+
+# Need custom connector/timeout settings? Bring your own session:
+config.session = aiohttp.ClientSession(...)
+```
+
+The rate limiter is shared even more broadly: token buckets are keyed by API key, so every instance using the same key draws from one bucket **even across separate config objects**. That means concurrent fan-out (see [Concurrency](#concurrency)) can never overrun your plan's limit no matter how the client objects are arranged. Pass a distinct `rate_limit_key` to opt out of this sharing, or a `redis_connection` to extend it across processes or machines.
 
 ## Error handling
 

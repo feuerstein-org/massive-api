@@ -100,17 +100,20 @@ class MassiveApiConfig(BaseModel):
         """Allow setting a custom session if needed."""
         self._session = value
 
-    def increment_session_ref(self) -> None:
-        """Increment the session reference count."""
+    def _acquire_session(self) -> None:
+        """Register an instance using the shared session (called on context-manager entry)."""
         self._session_ref_count += 1
 
-    def decrement_session_ref(self) -> None:
-        """Decrement the session reference count."""
-        self._session_ref_count = max(0, self._session_ref_count - 1)
+    async def _release_session(self) -> None:
+        """
+        Unregister an instance using the shared session (called on context-manager exit).
 
-    def should_close_session(self) -> bool:
-        """Check if the session should be closed (no more references)."""
-        return self._session_ref_count == 0
+        Closes the session once the last instance has exited. A session that was never
+        created (no request was made) is not created just to be closed.
+        """
+        self._session_ref_count = max(0, self._session_ref_count - 1)
+        if self._session_ref_count == 0 and self._session is not None and not self._session.closed:
+            await self._session.close()
 
     @property
     def rate_limiter(self) -> Any:
@@ -144,20 +147,16 @@ class BaseMassiveApi:
             msg = "Either config or api_key must be provided"
             raise ValueError(msg)
         self.config = config or MassiveApiConfig(api_key=api_key)
-        self.session = self.config.session
         self.BASE_URL = "https://api.massive.com"
 
     async def __aenter__(self) -> Self:
         """Enter the asynchronous context manager."""
-        self.config.increment_session_ref()
+        self.config._acquire_session()  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
         return self
 
     async def __aexit__(self, *args) -> None:  # type: ignore # noqa: ANN002
-        """Exit the asynchronous context manager and close session if no other instances are using it."""
-        self.config.decrement_session_ref()
-        # Only close session when no more references exist
-        if self.config.should_close_session() and self.session and not self.session.closed:
-            await self.session.close()
+        """Exit the asynchronous context manager; the config closes the session after the last exit."""
+        await self.config._release_session()  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
 
     async def _make_request(
         self,
@@ -194,7 +193,7 @@ class BaseMassiveApi:
             try:
                 async with (
                     self.config.rate_limiter(),
-                    self.session.request("GET", url, params=request_params, headers=headers) as response,
+                    self.config.session.request("GET", url, params=request_params, headers=headers) as response,
                 ):
                     response.raise_for_status()
                     data: dict[str, Any] = await response.json()
