@@ -58,7 +58,8 @@ config = MassiveApiConfig(
     requests_per_period=100,      # requests allowed per period
     period_seconds=1,             # length of the period, in seconds
     rate_limit_max_sleep=60,      # raise MaxSleepExceededError beyond this wait
-    max_retries=3,                # exponential backoff on HTTP 429 and 5xx
+    max_retries=3,                # exponential backoff on HTTP 429, 5xx, and transport errors
+    request_timeout=30,           # per-request timeout in seconds (connect + read)
     # redis_connection=redis_conn,  # optional: distributed rate limiting via redis.asyncio
 )
 ```
@@ -71,7 +72,9 @@ config = MassiveApiConfig(api_key="YOUR_API_KEY", requests_per_period=5, period_
 
 Requests that receive HTTP 429 are retried up to `max_retries` with exponential backoff (1s, 2s, 4s, …), floored at the token-refill interval (`period_seconds / requests_per_period`) so a slow tier waits at least long enough for the next token - e.g. on the 5/minute free tier each retry waits ≥12s rather than earning another 429.
 
-Transient server faults (HTTP 5xx) are retried the same way - all requests are GETs, so retrying is always safe. If a 5xx persists past `max_retries`, the final `ServerError` is raised; persistent 429s raise `MaxRetriesExceededError`.
+Transient server faults (HTTP 5xx) and transport failures (timeouts, connection errors) are retried the same way. If a 5xx persists past `max_retries`, the final `ServerError` is raised; persistent transport failures raise `TransportError`; persistent 429s raise `MaxRetriesExceededError`.
+
+Each request times out after `request_timeout` seconds (default 30). If you supply your own `aiohttp` session, its timeout settings are used instead.
 
 ## Error handling
 
@@ -85,6 +88,7 @@ from massive_api import (
     ServerError,            # HTTP 5xx
     MassiveApiHTTPError,    # any other HTTP error status
     MaxRetriesExceededError,  # 429 persisted past max_retries
+    TransportError,         # timeout / connection error persisted past max_retries
 )
 
 try:

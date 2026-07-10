@@ -10,7 +10,13 @@ from pytest_mock import MockerFixture
 from steindamm import MaxSleepExceededError
 
 from massive_api.base import BaseMassiveApi, MassiveApiConfig
-from massive_api.exceptions import AuthenticationError, MaxRetriesExceededError, NotFoundError, ServerError
+from massive_api.exceptions import (
+    AuthenticationError,
+    MaxRetriesExceededError,
+    NotFoundError,
+    ServerError,
+    TransportError,
+)
 
 TICKERS_URL = "https://api.massive.com/v3/reference/tickers"
 
@@ -216,6 +222,60 @@ async def test_5xx_retry_behavior(
                 assert sleep_calls == expected_sleep_calls
     finally:
         await session.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "transport_exception",
+    [
+        TimeoutError(),
+        aiohttp.ClientConnectionError("connection reset"),
+        aiohttp.ServerDisconnectedError(),
+    ],
+)
+async def test_transport_errors_retried(
+    mocker: MockerFixture,
+    test_config: MassiveApiConfig,
+    transport_exception: Exception,
+) -> None:
+    """Timeouts and connection errors are retried; exhaustion raises TransportError."""
+    session = aiohttp.ClientSession()
+
+    try:
+        test_config.max_retries = 2
+        test_config.session = session
+        api = BaseMassiveApi(config=test_config)
+
+        mock_sleep = mocker.patch("asyncio.sleep")
+
+        with aioresponses() as mock_http:
+            # Fail once, then succeed: the caller sees only the successful response.
+            mock_http.get(TICKERS_URL, exception=transport_exception)  # type: ignore
+            mock_http.get(TICKERS_URL, payload={"results": []})  # type: ignore
+
+            result = await api._make_request("v3/reference/tickers")
+            assert result == {"results": []}
+            assert mock_sleep.call_count == 1
+
+            # Persistent failure exhausts max_retries and surfaces as TransportError.
+            for _ in range(test_config.max_retries + 1):
+                mock_http.get(TICKERS_URL, exception=transport_exception)  # type: ignore
+
+            with pytest.raises(TransportError) as exc_info:
+                await api._make_request("v3/reference/tickers")
+            assert exc_info.value.__cause__ is transport_exception
+    finally:
+        await session.close()
+
+
+@pytest.mark.asyncio
+async def test_lazy_session_uses_request_timeout() -> None:
+    """The lazily created session applies `request_timeout` as the total timeout."""
+    config = MassiveApiConfig(api_key=generate_random_api_key(), request_timeout=7.5)
+    try:
+        assert config.session.timeout.total == 7.5
+    finally:
+        await config.session.close()
 
 
 @pytest.mark.asyncio

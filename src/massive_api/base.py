@@ -16,6 +16,7 @@ from massive_api.exceptions import (
     HTTP_TOO_MANY_REQUESTS,
     MaxRetriesExceededError,
     NotFoundError,
+    TransportError,
     http_error_from_response,
 )
 
@@ -58,10 +59,14 @@ class MassiveApiConfig(BaseModel):
     If a request would need to wait longer than `rate_limit_max_sleep` seconds for a token,
     a steindamm.MaxSleepExceededError is raised.
 
-    Retry behavior for 429 (Too Many Requests) and transient 5xx responses is configured via
-    `max_retries` (default 3). Retries use exponential backoff starting at 1 second. Set to 0
-    to disable. When 5xx retries are exhausted, the final ServerError is raised, persistent
-    429s raise MaxRetriesExceededError.
+    Retry behavior for 429 (Too Many Requests) responses, transient 5xx responses, and
+    transport failures (timeouts, connection errors) is configured via `max_retries`
+    (default 3). Retries use exponential backoff starting at 1 second. Set to 0 to disable.
+    MaxRetriesExceededError, ServerError and TransportError are raised respectively.
+
+    Each request times out after `request_timeout` seconds (default 30, covering the whole
+    request including connect and read). The timeout only applies to the lazily created
+    session; a custom session assigned via the `session` setter keeps its own timeout.
 
     `on_validation_error` controls the default behavior of validated list methods:
     - "raise": raise pydantic.ValidationError on the first invalid record.
@@ -72,6 +77,7 @@ class MassiveApiConfig(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     api_key: str = Field(min_length=1)
     max_retries: int = Field(default=3, ge=0)
+    request_timeout: float = Field(default=30.0, gt=0)
     requests_per_period: float = Field(default=100.0, gt=0)
     period_seconds: float = Field(default=1.0, gt=0)
     rate_limit_max_sleep: float = Field(default=60.0, ge=0)
@@ -86,7 +92,7 @@ class MassiveApiConfig(BaseModel):
     def session(self) -> aiohttp.ClientSession:
         """Lazily instantiate the aiohttp ClientSession when first accessed."""
         if self._session is None:
-            self._session = aiohttp.ClientSession()
+            self._session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.request_timeout))
         return self._session
 
     @session.setter
@@ -161,8 +167,8 @@ class BaseMassiveApi:
         """
         Make a single GET request to the Massive API with rate limiting and retries.
 
-        429 (Too Many Requests) and 5xx responses are retried with exponential backoff, since
-        both are typically transient. All requests are GETs, so retrying is always safe.
+        429 (Too Many Requests) responses, 5xx responses, and transport failures (timeouts,
+        connection errors) are retried with exponential backoff.
 
         Args:
             endpoint: The API endpoint path (e.g. "tickers")
@@ -174,6 +180,7 @@ class BaseMassiveApi:
         Raises:
             MaxRetriesExceededError: If 429 responses persist past max_retries.
             ServerError: If 5xx responses persist past max_retries.
+            TransportError: If timeouts or connection errors persist past max_retries.
             MassiveApiHTTPError: For any other HTTP error response (AuthenticationError on
                 401/403, NotFoundError on 404, otherwise the base class).
             steindamm.MaxSleepExceededError: If the rate-limit wait exceeds max_sleep.
@@ -192,17 +199,22 @@ class BaseMassiveApi:
                     response.raise_for_status()
                     data: dict[str, Any] = await response.json()
                     return data
+            # Retry 429, 5xx errors and transient connection errors
             except aiohttp.ClientResponseError as e:
-                # Retry 429 and 5xx errors; anything else is not transient.
                 retryable = e.status == HTTP_TOO_MANY_REQUESTS or e.status >= HTTP_SERVER_ERROR_MIN
                 if not retryable:
                     raise http_error_from_response(e) from e
                 if attempt >= self.config.max_retries:
                     if e.status == HTTP_TOO_MANY_REQUESTS:
                         raise MaxRetriesExceededError(self.config.max_retries, e.status) from None
-                    # Exhausted 5xx retries surface as ServerError, same as without retries.
+                    # Exhausted 5xx retries surface as ServerError
                     raise http_error_from_response(e) from e
                 logger.debug("Retrying request to %s after status %s (attempt %d)", url, e.status, attempt + 1)
+                await asyncio.sleep(self._retry_backoff(attempt))
+            except (aiohttp.ClientConnectionError, TimeoutError) as e:
+                if attempt >= self.config.max_retries:
+                    raise TransportError(e) from e
+                logger.debug("Retrying request to %s after transport error %r (attempt %d)", url, e, attempt + 1)
                 await asyncio.sleep(self._retry_backoff(attempt))
 
         msg = "Unexpected end of retry loop"
@@ -228,7 +240,7 @@ class BaseMassiveApi:
 
     def _retry_backoff(self, attempt: int) -> float:
         """
-        Seconds to wait before retrying a 429 or 5xx response.
+        Seconds to wait before retrying a 429, 5xx, or transport failure.
 
         Works for both, high and low rate limits. At least 1 second backoff is guaranteed,
         for low rate limits we start at a higher number automatically.

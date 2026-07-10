@@ -7,7 +7,7 @@ to handle any operational failure the client raises at request time.
 
 HTTP error responses are wrapped in a MassiveApiHTTPError subclass so callers never have to
 reach for the underlying transport library (aiohttp) to branch on failures. The originating
-aiohttp.ClientResponseError is always preserved on `__cause__`.
+aiohttp.ClientResponseError/ClientConnectionError/TransportError is always preserved on `__cause__`.
 """
 
 import aiohttp
@@ -51,6 +51,15 @@ class NotFoundError(MassiveApiHTTPError):
 
 class ServerError(MassiveApiHTTPError):
     """Raised on HTTP 5xx responses (a fault on the Massive API side)."""
+
+
+class TransportError(MassiveApiError):
+    """Raised when a request keeps failing at the transport level (timeout, connection error)."""
+
+    def __init__(self, cause: BaseException) -> None:
+        """Record a description of the underlying transport failure."""
+        detail = str(cause) or cause.__class__.__name__
+        super().__init__(f"Massive API request failed at the transport level: {detail}")
 
 
 class MaxRetriesExceededError(MassiveApiError):

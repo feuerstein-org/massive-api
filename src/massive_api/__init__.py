@@ -19,6 +19,7 @@ from massive_api.exceptions import (
     MaxRetriesExceededError,
     NotFoundError,
     ServerError,
+    TransportError,
 )
 from massive_api.params import (
     AdjustmentType,
@@ -64,6 +65,7 @@ __all__ = (
     "TickerEvents",
     "TickerOverview",
     "TickerSortField",
+    "TransportError",
     "build_query_params",
     "gather_bounded",
 )
