@@ -169,8 +169,58 @@ async def test_429_retry_behavior(
 
 
 @pytest.mark.asyncio
-async def test_non_429_errors_not_retried(mocker: MockerFixture, test_config: MassiveApiConfig) -> None:
-    """Test that non-429 errors are not retried."""
+@pytest.mark.parametrize(
+    ("max_retries", "num_5xx_responses", "success_after_retries", "expected_sleep_calls"),
+    [
+        (3, 3, True, [1, 2, 4]),  # Success after multiple retries with exponential backoff
+        (2, 3, False, [1, 2]),  # Fails after max_retries exceeded
+        (0, 1, False, []),  # Retry disabled with max_retries=0
+    ],
+)
+async def test_5xx_retry_behavior(
+    mocker: MockerFixture,
+    test_config: MassiveApiConfig,
+    max_retries: int,
+    num_5xx_responses: int,
+    success_after_retries: bool,
+    expected_sleep_calls: list[int],
+) -> None:
+    """Transient 5xx responses are retried like 429s, but exhaustion raises ServerError."""
+    session = aiohttp.ClientSession()
+
+    try:
+        test_config.max_retries = max_retries
+        test_config.session = session
+        api = BaseMassiveApi(config=test_config)
+
+        # Mock asyncio.sleep to avoid waiting during tests
+        mock_sleep = mocker.patch("asyncio.sleep")
+
+        with aioresponses() as mock_http:
+            for _ in range(num_5xx_responses):
+                mock_http.get(TICKERS_URL, status=503)  # type: ignore
+
+            if success_after_retries:
+                mock_http.get(TICKERS_URL, payload={"results": []})  # type: ignore
+                result = await api._make_request("v3/reference/tickers")
+                assert result == {"results": []}
+            else:
+                with pytest.raises(ServerError) as exc_info:
+                    await api._make_request("v3/reference/tickers")
+                assert exc_info.value.status == 503
+                assert isinstance(exc_info.value.__cause__, aiohttp.ClientResponseError)
+
+            assert mock_sleep.call_count == len(expected_sleep_calls)
+            if expected_sleep_calls:
+                sleep_calls = [call[0][0] for call in mock_sleep.call_args_list]
+                assert sleep_calls == expected_sleep_calls
+    finally:
+        await session.close()
+
+
+@pytest.mark.asyncio
+async def test_client_errors_not_retried(mocker: MockerFixture, test_config: MassiveApiConfig) -> None:
+    """Test that non-transient errors (4xx other than 429) are not retried."""
     session = aiohttp.ClientSession()
 
     try:
@@ -210,7 +260,7 @@ async def test_http_errors_wrapped_in_typed_exceptions(
     status: int,
     expected_exception: type[Exception],
 ) -> None:
-    """Non-429 HTTP errors surface as typed MassiveApiHTTPError subclasses, not raw aiohttp errors."""
+    """HTTP errors surface as typed MassiveApiHTTPError subclasses, not raw aiohttp errors."""
     session = aiohttp.ClientSession()
 
     try:
@@ -219,7 +269,9 @@ async def test_http_errors_wrapped_in_typed_exceptions(
         mocker.patch("asyncio.sleep")
 
         with aioresponses() as mock_http:
-            mock_http.get(TICKERS_URL, status=status)  # type: ignore
+            # repeat=True keeps returning the same status, so 5xx cases also cover the
+            # error type raised once retries are exhausted.
+            mock_http.get(TICKERS_URL, status=status, repeat=True)  # type: ignore
 
             with pytest.raises(expected_exception) as exc_info:
                 await api._make_request("v3/reference/tickers")

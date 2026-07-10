@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 from steindamm import AsyncTokenBucket
 
 from massive_api.exceptions import (
+    HTTP_SERVER_ERROR_MIN,
     HTTP_TOO_MANY_REQUESTS,
     MaxRetriesExceededError,
     NotFoundError,
@@ -57,8 +58,10 @@ class MassiveApiConfig(BaseModel):
     If a request would need to wait longer than `rate_limit_max_sleep` seconds for a token,
     a steindamm.MaxSleepExceededError is raised.
 
-    Retry behavior for 429 (Too Many Requests) responses is configured via `max_retries`
-    (default 3). Retries use exponential backoff starting at 1 second. Set to 0 to disable.
+    Retry behavior for 429 (Too Many Requests) and transient 5xx responses is configured via
+    `max_retries` (default 3). Retries use exponential backoff starting at 1 second. Set to 0
+    to disable. When 5xx retries are exhausted, the final ServerError is raised, persistent
+    429s raise MaxRetriesExceededError.
 
     `on_validation_error` controls the default behavior of validated list methods:
     - "raise": raise pydantic.ValidationError on the first invalid record.
@@ -156,7 +159,10 @@ class BaseMassiveApi:
         params: Mapping[str, str] | None = None,
     ) -> dict[str, Any]:
         """
-        Make a single GET request to the Massive API with rate limiting and 429 retries.
+        Make a single GET request to the Massive API with rate limiting and retries.
+
+        429 (Too Many Requests) and 5xx responses are retried with exponential backoff, since
+        both are typically transient. All requests are GETs, so retrying is always safe.
 
         Args:
             endpoint: The API endpoint path (e.g. "tickers")
@@ -167,8 +173,9 @@ class BaseMassiveApi:
 
         Raises:
             MaxRetriesExceededError: If 429 responses persist past max_retries.
-            MassiveApiHTTPError: For any non-429 HTTP error response (AuthenticationError on
-                401/403, NotFoundError on 404, ServerError on 5xx, otherwise the base class).
+            ServerError: If 5xx responses persist past max_retries.
+            MassiveApiHTTPError: For any other HTTP error response (AuthenticationError on
+                401/403, NotFoundError on 404, otherwise the base class).
             steindamm.MaxSleepExceededError: If the rate-limit wait exceeds max_sleep.
 
         """
@@ -186,11 +193,16 @@ class BaseMassiveApi:
                     data: dict[str, Any] = await response.json()
                     return data
             except aiohttp.ClientResponseError as e:
-                if e.status != HTTP_TOO_MANY_REQUESTS:
+                # Retry 429 and 5xx errors; anything else is not transient.
+                retryable = e.status == HTTP_TOO_MANY_REQUESTS or e.status >= HTTP_SERVER_ERROR_MIN
+                if not retryable:
                     raise http_error_from_response(e) from e
-                # Retry on 429 errors
                 if attempt >= self.config.max_retries:
-                    raise MaxRetriesExceededError(self.config.max_retries, e.status) from None
+                    if e.status == HTTP_TOO_MANY_REQUESTS:
+                        raise MaxRetriesExceededError(self.config.max_retries, e.status) from None
+                    # Exhausted 5xx retries surface as ServerError, same as without retries.
+                    raise http_error_from_response(e) from e
+                logger.debug("Retrying request to %s after status %s (attempt %d)", url, e.status, attempt + 1)
                 await asyncio.sleep(self._retry_backoff(attempt))
 
         msg = "Unexpected end of retry loop"
@@ -216,7 +228,7 @@ class BaseMassiveApi:
 
     def _retry_backoff(self, attempt: int) -> float:
         """
-        Seconds to wait before retrying a 429.
+        Seconds to wait before retrying a 429 or 5xx response.
 
         Works for both, high and low rate limits. At least 1 second backoff is guaranteed,
         for low rate limits we start at a higher number automatically.
