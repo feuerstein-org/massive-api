@@ -9,9 +9,7 @@ and result caps.
 from datetime import date, datetime
 
 import pytest
-
-from massive_api.params import AdjustmentType, DividendFrequency, Market, SplitSortField
-from massive_api.utils import (
+from spitzeisen.params import (
     build_query_params,
     coerce_choice,
     coerce_choices,
@@ -20,6 +18,8 @@ from massive_api.utils import (
     coerce_sort,
     resolve_page_size,
 )
+
+from massive_api.params import AdjustmentType, DividendFrequency, Market, SplitSortField
 
 
 def test_coerce_choice() -> None:

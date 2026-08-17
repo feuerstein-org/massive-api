@@ -2,21 +2,18 @@
 
 from datetime import UTC, date, datetime
 from typing import Any
-from unittest.mock import Mock
 
-import aiohttp
 import pytest
-from conftest import MockApiFactory, with_defaults
+from conftest import MockApiFactory, assert_endpoint_call, with_defaults
 from pydantic import ValidationError
+from spitzeisen.exceptions import http_error_from_status
 
-from massive_api.api.reference import ReferenceApi, Ticker, TickerEvents, TickerOverview
-from massive_api.exceptions import MassiveApiHTTPError, http_error_from_response
+from massive_api import MassiveApiHTTPError, ReferenceApi, Ticker, TickerEvents, TickerOverview
 
 
 def _response_error(status: int) -> MassiveApiHTTPError:
-    """Build the typed MassiveApiHTTPError that `_make_request` raises for the given HTTP status."""
-    raw = aiohttp.ClientResponseError(request_info=Mock(), history=(), status=status)
-    return http_error_from_response(raw)
+    """Build the typed error the request path raises for a given HTTP status."""
+    return http_error_from_status(status)
 
 
 # The SDK always sends these unless the call overrides them.
@@ -109,8 +106,9 @@ async def test_all_tickers_parameters(
 
     result = await api.get_all_tickers(**kwargs)
 
-    mocks.get_all_pages.assert_called_once_with(
-        "v3/reference/tickers",
+    assert_endpoint_call(
+        mocks.get_all_pages,
+        "/v3/reference/tickers",
         with_defaults(expected_params, DEFAULT_PARAMS),
         max_results=kwargs.get("max_results"),
     )
@@ -125,8 +123,9 @@ async def test_all_tickers_raw_returns_untouched_records(mock_api_factory: MockA
 
     result = await api.get_all_tickers_raw(market="stocks")
 
-    mocks.get_all_pages.assert_called_once_with(
-        "v3/reference/tickers",
+    assert_endpoint_call(
+        mocks.get_all_pages,
+        "/v3/reference/tickers",
         with_defaults({"market": "stocks"}, DEFAULT_PARAMS),
         max_results=None,
     )
@@ -213,7 +212,7 @@ async def test_ticker_overview_parameters(
 
     result = await api.get_ticker_overview("AAPL", **kwargs)
 
-    mocks.request_json.assert_called_once_with("v3/reference/tickers/AAPL", expected_params)
+    assert_endpoint_call(mocks.request, "/v3/reference/tickers/AAPL", expected_params)
     assert isinstance(result, TickerOverview)
 
 
@@ -235,6 +234,24 @@ async def test_ticker_overview_returns_none_on_404(mock_api_factory: MockApiFact
 
     assert await api.get_ticker_overview_raw("NOPE") is None
     assert await api.get_ticker_overview("NOPE") is None
+
+
+@pytest.mark.asyncio
+async def test_ticker_overview_returns_none_on_a_200_without_the_envelope(
+    mock_api_factory: MockApiFactory,
+) -> None:
+    """
+    A 200 whose body carries no `results` reads as absent, not as an empty overview.
+
+    Massive answers an unknown ticker with a 404, but an envelope-only body means the same
+    thing, and returning `{}` here would validate into a hollow model on any payload whose
+    fields are all optional.
+    """
+    api, mocks = mock_api_factory.create(ReferenceApi, mock_results=SAMPLE_OVERVIEW)
+    mocks.request_json.return_value = {"status": "OK", "request_id": "abc"}
+
+    assert await api.get_ticker_overview_raw("AAPL") is None
+    assert await api.get_ticker_overview("AAPL") is None
 
 
 @pytest.mark.asyncio
@@ -327,7 +344,7 @@ async def test_ticker_events_parameters(
 
     result = await api.get_ticker_events("META", **kwargs)
 
-    mocks.request_json.assert_called_once_with("vX/reference/tickers/META/events", expected_params)
+    assert_endpoint_call(mocks.request, "/vX/reference/tickers/META/events", expected_params)
     assert isinstance(result, TickerEvents)
 
 

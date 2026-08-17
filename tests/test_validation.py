@@ -4,7 +4,7 @@ import pytest
 from conftest import MockApiFactory
 from pydantic import ValidationError
 
-from massive_api.api.reference import ReferenceApi
+from massive_api import ReferenceApi
 
 GOOD = {"ticker": "AAPL", "active": True, "name": "Apple Inc."}
 BAD = {"name": "Missing ticker field"}  # required `ticker` and `active` are absent

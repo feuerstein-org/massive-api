@@ -1,0 +1,152 @@
+# What the vendor's OpenAPI document cannot say: what a call costs, how it paginates, and
+# what this client calls things. See spitzeisen's codegen/manifest.py for the schema.
+vendor: massive
+base_url: https://api.massive.com
+package: massive_api
+client_name: MassiveApi
+
+limits:
+  # Massive meters one thing: requests. The default tier is 100/second; the basic free tier
+  # is 5/minute, which callers set through MassiveApiConfig rather than here.
+  requests:
+    capacity: 100
+    refill: 1s
+    max_sleep: 60
+
+endpoints:
+  tickers:
+    path: /v3/reference/tickers
+    method_name: get_all_tickers
+    model: Ticker
+    costs: {requests: 1}
+    pagination: cursor_url
+    sort_style: param
+    order_default: asc
+    summary: Get every ticker matching the filters, validated into `Ticker` models.
+    docs_url: https://massive.com/docs/rest/stocks/tickers/all-tickers
+    params:
+      type: {name: ticker_type}
+      market: {style: choice, literal: Market}
+      date: {style: date}
+      # Always sent: this client defaults to active tickers only.
+      active: {default: "True"}
+
+  splits:
+    path: /stocks/v1/splits
+    method_name: get_splits
+    model: Split
+    costs: {requests: 1}
+    pagination: cursor_url
+    max_page_size: 5000
+    # This endpoint has no `order` parameter: direction is a `.asc`/`.desc` suffix on `sort`.
+    sort_style: suffix
+    summary: Get stock splits (across pages, up to `max_results`), validated into `Split` models.
+    docs_url: https://massive.com/docs/rest/stocks/corporate-actions/splits
+    exclude_params: [adjustment_type, ticker.any_of]
+    params:
+      adjustment_type.any_of:
+        name: adjustment_types
+        style: csv_list
+        literal: AdjustmentType
+        description: >-
+          Filter by any of the given adjustment types. Pass a single-element list to match one
+          type, e.g. ["forward_split"].
+
+  dividends:
+    path: /stocks/v1/dividends
+    method_name: get_dividends
+    model: Dividend
+    costs: {requests: 1}
+    pagination: cursor_url
+    max_page_size: 5000
+    sort_style: suffix
+    order_default: asc
+    summary: Get dividends (across pages, up to `max_results`), validated into `Dividend` models.
+    docs_url: https://massive.com/docs/rest/stocks/corporate-actions/dividends
+    exclude_params: [distribution_type]
+    params:
+      ticker.any_of:
+        name: tickers
+        style: csv
+        description: Match any of the given ticker symbols.
+      frequency: {style: choice, literal: DividendFrequency}
+      distribution_type.any_of:
+        name: distribution_types
+        style: csv_list
+        literal: DistributionType
+        description: Filter by any of the given distribution types.
+      frequency.any_of:
+        name: frequencies
+        style: csv_list
+        literal: DividendFrequency
+        description: Filter by any of the given payout frequencies.
+
+  # The two single-resource endpoints below return one object rather than a collection, and
+  # declare 404 a routine "no such ticker" rather than a failure. Their models flatten nested
+  # objects the schema cannot express, so they are hand-written: see models/_manual.py.
+  ticker_overview:
+    path: /v3/reference/tickers/{ticker}
+    method_name: get_ticker_overview
+    model: TickerOverview
+    # Flattens the nested `address` and `branding` objects, which no schema can express.
+    generate_model: false
+    shape: single
+    not_found: empty
+    costs: {requests: 1}
+    summary: Get detailed information for a single ticker, validated into a `TickerOverview`.
+    docs_url: https://massive.com/docs/rest/stocks/tickers/ticker-overview
+    params:
+      date: {style: date}
+
+  ticker_events:
+    path: /vX/reference/tickers/{id}/events
+    method_name: get_ticker_events
+    model: TickerEvents
+    shape: single
+    not_found: empty
+    costs: {requests: 1}
+    # The vendor's placeholder is `{id}`; callers pass a ticker symbol, CUSIP or FIGI.
+    path_params: {id: ticker_id}
+    summary: Get the corporate-event history for a ticker, validated into `TickerEvents`.
+    docs_url: https://massive.com/docs/rest/stocks/corporate-actions/ticker-events
+    params:
+      types: {style: choice, literal: TickerEventType}
+    # The vendor calls it `event_type`; this client has always exposed `type`.
+    aliases:
+      Events.event_type: type
+
+  aggregates:
+    path: /v2/aggs/ticker/{stocksTicker}/range/{multiplier}/{timespan}/{from}/{to}
+    method_name: get_custom_bars
+    model: Bar
+    costs: {requests: 1}
+    pagination: none
+    max_page_size: 50000
+    # `sort` here is the direction itself, not a field, so there is no `order` argument.
+    sort_style: none
+    path_params:
+      stocksTicker: ticker
+      from: from_date
+      to: to_date
+    summary: Get custom OHLCV aggregate bars for a ticker, validated into `Bar` models.
+    docs_url: https://massive.com/docs/rest/stocks/aggregates/custom-bars
+    # The wire uses single-letter keys; these are the names this client has always exposed.
+    params:
+      multiplier: {type: int, description: "Size of the timespan multiplier (e.g. 1 for 1-day bars)."}
+      timespan: {style: choice, literal: Timespan}
+      from: {style: date}
+      to: {style: date}
+      sort: {name: order, style: choice, literal: Order, description: "Sort direction for the returned bars."}
+    aliases:
+      Bar.o: open
+      Bar.h: high
+      Bar.l: low
+      Bar.c: close
+      Bar.v: volume
+      Bar.t: timestamp
+      Bar.vw: vwap
+      Bar.n: transactions
+    # Unix milliseconds, which pydantic would otherwise read as seconds. The type is the
+    # client's own; spitzeisen only carries the pointer.
+    type_overrides:
+      Bar.timestamp: massive_api.types.EpochMillis

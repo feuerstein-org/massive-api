@@ -4,10 +4,10 @@ from datetime import date
 from typing import Any
 
 import pytest
-from conftest import MockApiFactory, with_defaults
+from conftest import MockApiFactory, assert_endpoint_call, with_defaults
 from pydantic import ValidationError
 
-from massive_api.api.dividends import Dividend, DividendsApi
+from massive_api import Dividend, DividendsApi
 
 # The SDK always sends these unless the call overrides them.
 DEFAULT_PARAMS = {"sort": "ticker.asc", "limit": "5000"}
@@ -85,8 +85,9 @@ async def test_dividends_parameters(
 
     result = await api.get_dividends(**kwargs)
 
-    mocks.get_all_pages.assert_called_once_with(
-        "stocks/v1/dividends",
+    assert_endpoint_call(
+        mocks.get_all_pages,
+        "/stocks/v1/dividends",
         with_defaults(expected_params, DEFAULT_PARAMS),
         max_results=kwargs.get("max_results"),
     )
@@ -101,8 +102,9 @@ async def test_dividends_raw_returns_untouched_records(mock_api_factory: MockApi
 
     result = await api.get_dividends_raw(ticker="AAPL")
 
-    mocks.get_all_pages.assert_called_once_with(
-        "stocks/v1/dividends",
+    assert_endpoint_call(
+        mocks.get_all_pages,
+        "/stocks/v1/dividends",
         with_defaults({"ticker": "AAPL"}, DEFAULT_PARAMS),
         max_results=None,
     )

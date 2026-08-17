@@ -9,6 +9,17 @@ run = [
     "uv run pre-commit install"
 ]
 
+[tasks.codegen]
+description = "Regenerate models and endpoint modules from spec/"
+run = [
+    "uv run spitzeisen-gen models --spec-dir spec --output src/massive_api/models/_generated.py",
+    "uv run spitzeisen-gen endpoints --spec-dir spec --package-root src/massive_api",
+]
+
+[tasks.check-codegen]
+description = "Fail if the committed generated code is stale"
+run = "uv run spitzeisen-gen check --spec-dir spec --package-root src/massive_api"
+
 [tasks.pre-commit]
 description = "Run pre-commit hooks on all files"
 depends = ["lint-fix"]

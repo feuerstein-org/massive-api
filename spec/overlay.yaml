@@ -1,0 +1,104 @@
+overlay: 1.0.0
+info:
+  title: massive-api corrections
+  version: 0.1.0
+
+# The vendor document is accurate but under-specified: response schemas are inline and
+# untitled, almost nothing is marked required, and several enums and date formats appear on
+# the request side but not the response side. Each action below patches one of those gaps.
+# Targets are JSONPath into the vendor document, so a path that moves fails loudly here.
+actions:
+  # --- splits -------------------------------------------------------------------------
+  - target: $.paths['/stocks/v1/splits'].get.responses['200'].content['application/json'].schema.properties.results.items.required
+    remove: true
+  - target: $.paths['/stocks/v1/splits'].get.responses['200'].content['application/json'].schema.properties.results.items
+    update:
+      title: Split
+      # `id` and `historical_adjustment_factor` are nullable but must be present: this
+      # client treats a record missing them as malformed rather than as a partial record.
+      required: [ticker, execution_date, adjustment_type, split_from, split_to, id, historical_adjustment_factor]
+  - target: $.paths['/stocks/v1/splits'].get.responses['200'].content['application/json'].schema.properties.results.items.properties.adjustment_type
+    update:
+      # Documented in prose on the response side; declared as an enum only on the request side.
+      enum: [forward_split, reverse_split, stock_dividend]
+  # The request-side date filters are plain strings; the response field is a proper date.
+  - target: $.paths['/stocks/v1/splits'].get.parameters[?(@.name=='execution_date')].schema
+    update: {format: date}
+  - target: $.paths['/stocks/v1/splits'].get.parameters[?(@.name=='execution_date.gt')].schema
+    update: {format: date}
+  - target: $.paths['/stocks/v1/splits'].get.parameters[?(@.name=='execution_date.gte')].schema
+    update: {format: date}
+  - target: $.paths['/stocks/v1/splits'].get.parameters[?(@.name=='execution_date.lt')].schema
+    update: {format: date}
+  - target: $.paths['/stocks/v1/splits'].get.parameters[?(@.name=='execution_date.lte')].schema
+    update: {format: date}
+  - target: $.paths['/stocks/v1/splits'].get.parameters[?(@.name=='sort')].schema
+    update:
+      enum: [ticker, execution_date]
+
+  # Present but nullable: `required` alone would make them non-nullable.
+  - target: $.paths['/stocks/v1/splits'].get.responses['200'].content['application/json'].schema.properties.results.items.properties.id
+    update: {nullable: true}
+  - target: $.paths['/stocks/v1/splits'].get.responses['200'].content['application/json'].schema.properties.results.items.properties.historical_adjustment_factor
+    update: {nullable: true}
+
+  # --- dividends ----------------------------------------------------------------------
+  - target: $.paths['/stocks/v1/dividends'].get.responses['200'].content['application/json'].schema.properties.results.items.required
+    remove: true
+  - target: $.paths['/stocks/v1/dividends'].get.responses['200'].content['application/json'].schema.properties.results.items
+    update:
+      title: Dividend
+      required: [ticker, ex_dividend_date, cash_amount, distribution_type]
+  - target: $.paths['/stocks/v1/dividends'].get.responses['200'].content['application/json'].schema.properties.results.items.properties.distribution_type
+    update:
+      enum: [recurring, special, supplemental, irregular, unknown]
+  - target: $.paths['/stocks/v1/dividends'].get.parameters[?(@.name=='sort')].schema
+    update:
+      enum: [ticker, ex_dividend_date, frequency, distribution_type]
+  # Date filters the vendor declares as plain strings.
+  - target: $.paths['/stocks/v1/dividends'].get.parameters[?(@.name=='ex_dividend_date')].schema
+    update: {format: date}
+  - target: $.paths['/stocks/v1/dividends'].get.parameters[?(@.name=='ex_dividend_date.gt')].schema
+    update: {format: date}
+  - target: $.paths['/stocks/v1/dividends'].get.parameters[?(@.name=='ex_dividend_date.gte')].schema
+    update: {format: date}
+  - target: $.paths['/stocks/v1/dividends'].get.parameters[?(@.name=='ex_dividend_date.lt')].schema
+    update: {format: date}
+  - target: $.paths['/stocks/v1/dividends'].get.parameters[?(@.name=='ex_dividend_date.lte')].schema
+    update: {format: date}
+  - target: $.paths['/stocks/v1/dividends'].get.parameters[?(@.name=='declaration_date')].schema
+    update: {format: date}
+  - target: $.paths['/stocks/v1/dividends'].get.parameters[?(@.name=='record_date')].schema
+    update: {format: date}
+  - target: $.paths['/stocks/v1/dividends'].get.parameters[?(@.name=='pay_date')].schema
+    update: {format: date}
+
+  # --- tickers ------------------------------------------------------------------------
+  # `update` merges arrays rather than replacing them, so the vendor's `required` list has to
+  # be removed before ours can take its place. The vendor marks name/market/locale required;
+  # this client has always tolerated their absence rather than dropping the whole record.
+  - target: $.paths['/v3/reference/tickers'].get.responses['200'].content['application/json'].schema.properties.results.items.required
+    remove: true
+  - target: $.paths['/v3/reference/tickers'].get.responses['200'].content['application/json'].schema.properties.results.items
+    update:
+      title: Ticker
+      required: [ticker, active]
+
+  # --- ticker events ------------------------------------------------------------------
+  # Title the container only: titling an array's `items` makes the generator emit a
+  # RootModel wrapper around the real class. The item class is re-exported under the
+  # client's own name from models/__init__.py instead.
+  - target: $.paths['/vX/reference/tickers/{id}/events'].get.responses['200'].content['application/json'].schema.properties.results
+    update:
+      title: TickerEvents
+      # A response without a name or an events list is malformed, not a ticker with no history.
+      required: [name, events]
+  - target: $.paths['/vX/reference/tickers/{id}/events'].get.responses['200'].content['application/json'].schema.properties.results.properties.events.items
+    update:
+      required: [event_type, date]
+
+  # --- aggregates ---------------------------------------------------------------------
+  # This response is composed with allOf; the bar records live in the third branch.
+  - target: $.paths['/v2/aggs/ticker/{stocksTicker}/range/{multiplier}/{timespan}/{from}/{to}'].get.responses['200'].content['application/json'].schema.allOf[2].properties.results.items
+    update:
+      title: Bar

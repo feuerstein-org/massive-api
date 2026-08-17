@@ -3,7 +3,7 @@
 import asyncio
 import logging
 
-from massive_api import MassiveApi, MassiveApiConfig, gather_bounded
+from massive_api import MassiveApi, gather_bounded, massive_config
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -45,7 +45,7 @@ async def main() -> None:
         logger.info("Retrieved %s dividends", len(dividends))
 
     # Example 2: custom config + bounded-concurrency fan-out over many tickers.
-    config = MassiveApiConfig(
+    config = massive_config(
         api_key="demo",
         max_retries=5,
         # Drop invalid rows instead of raising (per-call override also available).

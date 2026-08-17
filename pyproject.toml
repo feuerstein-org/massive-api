@@ -5,14 +5,12 @@ description = "Async Python client for the Massive financial-data API"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
- # aiohttp is capped below 3.14 until aioresponses supports the new ClientResponse
- # signature (3.14 added a required `stream_writer` kwarg that aioresponses 0.7.x omits).
- # https://github.com/pnuckowski/aioresponses/issues/289
- "aiohttp>=3.12.15,<3.14",
+ "spitzeisen>=0.1.0",
  "pydantic>=2.11.7",
- "steindamm>=0.8.0",
- "urllib3"
 ]
+
+[tool.uv.sources]
+spitzeisen = { path = "../spitzeisen", editable = true }
 
 [project.urls]
 Homepage = "https://github.com/feuerstein-org/massive-api"
@@ -20,7 +18,6 @@ Repository = "https://github.com/feuerstein-org/massive-api"
 
 [dependency-groups]
 dev = [
-    "aioresponses",
     "pre-commit",
     "coverage",
     "pytest",
@@ -29,11 +26,15 @@ dev = [
     "pyright[nodejs]",
     "pytest-randomly",
     "pytest-mock",
+    "spitzeisen[codegen]",
 ]
 
 [build-system]
 requires = ["uv_build>=0.8.5,<0.9.0"]
 build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
 
 [tool.coverage.run]
 branch = true
@@ -76,6 +77,15 @@ lint.ignore = [
 lint.unfixable = []
 
 [tool.ruff.lint.per-file-ignores]
+# Emitted by spitzeisen-gen from spec/ - never edited by hand.
+"src/massive_api/_async/_generated/*" = ["D", "E501", "PLR0913", "RUF100"]
+"src/massive_api/_sync/_generated/*" = ["D", "E501", "PLR0913", "RUF100"]
+"src/massive_api/models/_generated.py" = [
+    "D", "E501", "RUF100",
+    "ERA001",   # The generator stamps its input filename in a header comment
+    "N815",     # Field names mirror the vendor payload, mixedCase and all
+    "TC001",    # pydantic resolves these at runtime, not only for annotations
+]
 "tests/*" = [
     "DTZ001",   # Require tzinfo in datetime constructors
     "INP001",   # Require packages to to have a __init__.py file

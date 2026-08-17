@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from massive_api.utils import gather_bounded
+from massive_api import gather_bounded
 
 
 @pytest.mark.asyncio

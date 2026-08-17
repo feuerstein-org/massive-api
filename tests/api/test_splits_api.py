@@ -4,10 +4,10 @@ from datetime import date
 from typing import Any
 
 import pytest
-from conftest import MockApiFactory, with_defaults
+from conftest import MockApiFactory, assert_endpoint_call, with_defaults
 from pydantic import ValidationError
 
-from massive_api.api.splits import Split, SplitsApi
+from massive_api import Split, SplitsApi
 
 # The SDK always sends these unless the call overrides them (sort folds from
 # sort="execution_date" + order="desc").
@@ -63,8 +63,9 @@ async def test_splits_parameters(
 
     result = await api.get_splits(**kwargs)
 
-    mocks.get_all_pages.assert_called_once_with(
-        "stocks/v1/splits",
+    assert_endpoint_call(
+        mocks.get_all_pages,
+        "/stocks/v1/splits",
         with_defaults(expected_params, DEFAULT_PARAMS),
         max_results=kwargs.get("max_results"),
     )
@@ -79,8 +80,9 @@ async def test_splits_raw_returns_untouched_records(mock_api_factory: MockApiFac
 
     result = await api.get_splits_raw(ticker="AAPL")
 
-    mocks.get_all_pages.assert_called_once_with(
-        "stocks/v1/splits",
+    assert_endpoint_call(
+        mocks.get_all_pages,
+        "/stocks/v1/splits",
         with_defaults({"ticker": "AAPL"}, DEFAULT_PARAMS),
         max_results=None,
     )

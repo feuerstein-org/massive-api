@@ -29,6 +29,9 @@ DividendSortField = Literal["ticker", "ex_dividend_date", "frequency", "distribu
 
 AdjustmentType = Literal["forward_split", "reverse_split", "stock_dividend"]
 
+# Size of the time window for a custom-bars (OHLCV) aggregate.
+Timespan = Literal["second", "minute", "hour", "day", "week", "month", "quarter", "year"]
+
 DistributionType = Literal["recurring", "special", "supplemental", "irregular", "unknown"]
 
 # Documented payout cadences: 0 = non-recurring/irregular, 1 = annual, 2 = semi-annual,

@@ -30,6 +30,9 @@ async def main():
         # Stock splits (paginated automatically)
         splits = await api.splits_api.get_splits(ticker="AAPL")
 
+        # Custom OHLCV bars (e.g. daily bars for January 2025)
+        bars = await api.aggregates_api.get_custom_bars("AAPL", 1, "day", "2025-01-01", "2025-01-31")
+
 asyncio.run(main())
 ```
 
@@ -42,6 +45,7 @@ asyncio.run(main())
 | `reference_api` | `get_ticker_events(ticker_id, ...)` | `GET /vX/reference/tickers/{id}/events` |
 | `splits_api` | `get_splits(...)` | `GET /stocks/v1/splits` |
 | `dividends_api` | `get_dividends(...)` | `GET /stocks/v1/dividends` |
+| `aggregates_api` | `get_custom_bars(ticker, multiplier, timespan, from, to, ...)` | `GET /v2/aggs/ticker/{ticker}/range/{multiplier}/{timespan}/{from}/{to}` |
 
 More endpoints are coming soon. Contributions are welcome - see [Contributing](#contributing).
 
