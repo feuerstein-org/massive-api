@@ -92,6 +92,8 @@ config.session = aiohttp.ClientSession(...)
 
 The rate limiter is shared even more broadly: token buckets are keyed by API key, so every instance using the same key draws from one bucket **even across separate config objects**. That means concurrent fan-out (see [Concurrency](#concurrency)) can never overrun your plan's limit no matter how the client objects are arranged. Pass a distinct `rate_limit_key` to opt out of this sharing, or a `redis_connection` to extend it across processes or machines.
 
+> Note: If you bring your own session, the `MassiveApi` will try to close it on `__aexit__` if no other `MassiveApi` classes use it.
+
 ## Error handling
 
 Every failure the client raises at request time is a subclass of `MassiveApiError`, so you never have to catch the underlying transport (`aiohttp`) exceptions:
@@ -160,7 +162,7 @@ await api.splits_api.get_splits(ticker="AAPL", sort="ticker", order="asc")
 
 ## Concurrency
 
-Use `gather_bounded` to fan out many requests (e.g. Ticker Overview across ~10k tickers) while keeping the number of in-flight coroutines bounded so they saturate - but do not overrun - the 100/s bucket:
+Use `gather_bounded` to fan out many requests (e.g. Ticker Overview across ~10k tickers) while keeping the number of in-flight coroutines bounded so they saturate - but do not overrun - the 100/s bucket ([Massive rate limit](https://massive.com/knowledge-base/article/what-is-the-request-limit-for-massives-restful-apis)):
 
 ```python
 from massive_api import gather_bounded

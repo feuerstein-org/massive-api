@@ -149,6 +149,8 @@ class ReferenceApi(BaseMassiveApi):
         """
         Fetch tickers across pages as raw JSON dicts (no validation).
 
+        Only available for tickers active at the date queried.
+
         Docs: https://massive.com/docs/rest/stocks/tickers/all-tickers
 
         See `get_all_tickers` for the meaning of each parameter.
@@ -199,6 +201,8 @@ class ReferenceApi(BaseMassiveApi):
     ) -> list[Ticker]:
         """
         Get tickers (across pages, up to `max_results`), validated into `Ticker` models.
+
+        Only available for tickers active at the date queried.
 
         Docs: https://massive.com/docs/rest/stocks/tickers/all-tickers
 
